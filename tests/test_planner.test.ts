@@ -119,4 +119,17 @@ describe("makePlannerNode", () => {
     expect(result.subtasks).toEqual([]);
     expect(result.error_count).toBe(BASE_STATE.error_count + 1);
   });
+
+  it("uses empty string content and increments errors when LLM returns non-string content (array)", async () => {
+    // Exercises line 81: typeof response.content === "string" ? response.content : ""
+    // When content is non-string (e.g. array of blocks), content becomes ""
+    // parseSubtasks("") tries JSON.parse("") → throws → returns null → error branch
+    const { AIMessage: RealAIMessage } = await import("@langchain/core/messages");
+    const arrayContentMsg = new RealAIMessage({ content: [{ type: "text", text: "hello" }] });
+    mockLlm.invoke.mockResolvedValue(arrayContentMsg);
+    const node = makePlannerNode(mockLlm as never);
+    const result = await node(BASE_STATE);
+    expect(result.subtasks).toEqual([]);
+    expect(result.error_count).toBe(BASE_STATE.error_count + 1);
+  });
 });

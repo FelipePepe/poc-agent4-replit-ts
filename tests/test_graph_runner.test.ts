@@ -31,6 +31,11 @@ vi.mock("../src/guidance/classifier", () => ({
   ACTIVATION_THRESHOLD: 3,
 }));
 
+const mockCreateLlmClassifier = vi.fn(() => ({ classify: vi.fn() }));
+vi.mock("../src/guidance/ollama_classifier", () => ({
+  createLlmClassifier: mockCreateLlmClassifier,
+}));
+
 vi.mock("../src/core/models", () => ({
   makeModelRouter: vi.fn(() => ({})),
   FALLBACK_THRESHOLD: 3,
@@ -131,5 +136,29 @@ describe("createGraphRunner", () => {
     const { createGraphRunner } = await import("../src/api/graph_runner");
     const runner = createGraphRunner(makeConfig());
     await expect(runner("prompt")).rejects.toThrow("LLM timeout");
+  });
+
+  it("returns empty artifacts array when graph state has no artifacts property (line 80)", async () => {
+    // Exercises: result.artifacts ?? [] — the ?? [] fallback when artifacts is undefined
+    mockInvoke.mockResolvedValue({}); // no artifacts property at all
+    const { createGraphRunner } = await import("../src/api/graph_runner");
+    const runner = createGraphRunner(makeConfig());
+    const result = await runner("prompt without artifacts");
+    expect(result).toEqual({ artifacts: [] });
+  });
+
+  it("uses createLlmClassifier when OLLAMA_BASE_URL is set in process.env", async () => {
+    // Exercises line 64-65: ollamaBaseUrl is truthy → createLlmClassifier(ollamaBaseUrl, model)
+    process.env.OLLAMA_BASE_URL = "http://localhost:11434";
+    try {
+      const { createGraphRunner } = await import("../src/api/graph_runner");
+      createGraphRunner(makeConfig());
+      expect(mockCreateLlmClassifier).toHaveBeenCalledWith(
+        "http://localhost:11434",
+        "phi3-mini"
+      );
+    } finally {
+      delete process.env.OLLAMA_BASE_URL;
+    }
   });
 });

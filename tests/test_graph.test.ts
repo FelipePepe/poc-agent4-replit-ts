@@ -460,4 +460,155 @@ describe("buildGraph Fase 1 — ReAct loop", () => {
     expect(result.model_switches).toBe(1);
     expect(result.current_model).toBe("haiku");
   });
+
+  // -------------------------------------------------------------------------
+  // Branch coverage: estimateTokens with non-string message content (line 90)
+  // -------------------------------------------------------------------------
+
+  it("handles messages with non-string (array) content in estimateTokens", async () => {
+    // Exercises line 90: typeof m.content === "string" ? m.content : JSON.stringify(m.content)
+    // By passing a classifier (so estimateTokens is called) AND a message with array content
+    mockLlm.invoke = vi.fn().mockResolvedValue(new AIMessage("ok"));
+
+    const graph = buildGraph({
+      config: loadConfig(TEST_ENV),
+      llm: mockLlm as unknown as GraphConfig["llm"],
+      classifier: makeTrajectoryClassifier(),
+    });
+
+    // AIMessage with array content (multimodal) triggers the JSON.stringify branch
+    const arrayContentMsg = new AIMessage({ content: [{ type: "text", text: "prior message" }] });
+
+    // With consecutive_errors >= ACTIVATION_THRESHOLD, estimateTokens is called
+    await graph.invoke({
+      messages: [arrayContentMsg],
+      consecutive_errors: 3,
+    });
+
+    // Should complete without error and have called the LLM
+    expect(mockLlm.invoke).toHaveBeenCalledTimes(1);
+  });
+
+  // -------------------------------------------------------------------------
+  // Branch coverage: classifier shouldActivate=false does NOT inject guidance (line 134)
+  // -------------------------------------------------------------------------
+
+  it("does not inject guidance when classifier returns shouldActivate=false", async () => {
+    // Exercises line 134: the branch where shouldActivate is false
+    const capturedArgs: unknown[][] = [];
+    mockLlm.invoke = vi.fn().mockImplementation(async (msgs: unknown[]) => {
+      capturedArgs.push(msgs);
+      return new AIMessage("ok");
+    });
+
+    // Inject a stub classifier that always returns shouldActivate=false
+    const noOpClassifier = {
+      classify: () => ({
+        shouldActivate: false,
+        labels: [],
+        microInstructions: [],
+      }),
+    };
+
+    const graph = buildGraph({
+      config: loadConfig(TEST_ENV),
+      llm: mockLlm as unknown as GraphConfig["llm"],
+      classifier: noOpClassifier as ReturnType<typeof makeTrajectoryClassifier>,
+    });
+
+    await graph.invoke({
+      messages: [new HumanMessage("test")],
+      consecutive_errors: 3, // above threshold so classifier is called
+    });
+
+    // No [GUIDANCE] message should appear in the LLM call
+    const lastCall = capturedArgs[capturedArgs.length - 1];
+    const hasGuidance = lastCall.some(
+      (m) =>
+        typeof (m as { content?: unknown }).content === "string" &&
+        ((m as { content: string }).content as string).includes("[GUIDANCE]")
+    );
+    expect(hasGuidance).toBe(false);
+  });
+
+  it("does not inject guidance when classifier returns empty microInstructions", async () => {
+    // Exercises line 134: shouldActivate=true but microInstructions is empty
+    const capturedArgs: unknown[][] = [];
+    mockLlm.invoke = vi.fn().mockImplementation(async (msgs: unknown[]) => {
+      capturedArgs.push(msgs);
+      return new AIMessage("ok");
+    });
+
+    // Inject a stub classifier that returns shouldActivate=true but empty microInstructions
+    const emptyInstructionsClassifier = {
+      classify: () => ({
+        shouldActivate: true,
+        labels: ["error-loop"],
+        microInstructions: [], // empty → should NOT inject
+      }),
+    };
+
+    const graph = buildGraph({
+      config: loadConfig(TEST_ENV),
+      llm: mockLlm as unknown as GraphConfig["llm"],
+      classifier: emptyInstructionsClassifier as ReturnType<typeof makeTrajectoryClassifier>,
+    });
+
+    await graph.invoke({
+      messages: [new HumanMessage("test")],
+      consecutive_errors: 3,
+    });
+
+    const lastCall = capturedArgs[capturedArgs.length - 1];
+    const hasGuidance = lastCall.some(
+      (m) =>
+        typeof (m as { content?: unknown }).content === "string" &&
+        ((m as { content: string }).content as string).includes("[GUIDANCE]")
+    );
+    expect(hasGuidance).toBe(false);
+  });
+
+  // -------------------------------------------------------------------------
+  // Branch coverage: tool throws non-Error value (line 230)
+  // -------------------------------------------------------------------------
+
+  it("returns ToolMessage with String(err) when tool throws a non-Error value", async () => {
+    // Exercises line 230: err instanceof Error ? err.message : String(err)
+    // The non-Error branch is when a tool throws a plain string or object
+    const throwsStringMsg = new AIMessage({
+      content: "",
+      tool_calls: [
+        { id: "tc-nonError", name: "write_file", args: { path: "x.py", content: "x" } },
+      ],
+    });
+
+    const mockToolsLocal = {
+      write_file: vi.fn().mockImplementation(() => {
+        throw "string error value"; // non-Error throw — intentional for branch coverage
+      }),
+      read_file: vi.fn().mockReturnValue(""),
+      execute_shell: vi.fn().mockReturnValue({ stdout: "", stderr: "", exitCode: 0 }),
+      search_web: vi.fn().mockReturnValue(""),
+    };
+
+    mockLlm.invoke = vi.fn()
+      .mockResolvedValueOnce(throwsStringMsg)
+      .mockResolvedValueOnce(new AIMessage("done"));
+
+    const graph = buildGraph({
+      config: loadConfig(TEST_ENV),
+      llm: mockLlm as unknown as GraphConfig["llm"],
+      tools: mockToolsLocal,
+    });
+
+    const result = await graph.invoke({ messages: [new HumanMessage("test non-error throw")] });
+
+    // ToolMessage content should contain the stringified error
+    const toolMsg = result.messages.find(
+      (m: { content?: unknown }) =>
+        typeof m.content === "string" &&
+        (m.content as string).includes("string error value")
+    );
+    expect(toolMsg).toBeDefined();
+  });
 });
