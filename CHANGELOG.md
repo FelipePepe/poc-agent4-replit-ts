@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.0] — 2026-03-15
+
+### Added
+- Ollama/phi3:mini LLM classifier: `createLlmClassifier()` via `OLLAMA_BASE_URL` env var
+- Falls back silently to rule-based classifier when Ollama is not available
+- 8 new tests — 306 total
+
 ## [1.4.0] — 2026-03-15
 
 ### Added
