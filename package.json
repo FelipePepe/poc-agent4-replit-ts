@@ -17,6 +17,7 @@
     "@langchain/anthropic": "^0.3.0",
     "@langchain/core": "^0.3.0",
     "@langchain/langgraph": "^0.2.0",
+    "@modelcontextprotocol/sdk": "^1.27.1",
     "better-sqlite3": "^12.8.0",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
@@ -40,6 +41,8 @@
   "jest": {
     "preset": "ts-jest",
     "testEnvironment": "node",
+    "testTimeout": 15000,
+    "forceExit": true,
     "testMatch": [
       "**/tests/**/*.test.ts"
     ],
