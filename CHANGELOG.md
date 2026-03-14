@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.4.0] — 2026-03-15
+
+### Added
+- LangSmith tracing wired: `setupLangSmith()` activates LANGCHAIN_TRACING_V2 auto-tracing
+- `wrapWithTrace()` wraps graph runner as named root span in LangSmith UI
+- No-op when LANGSMITH_API_KEY is not set (safe in CI/test)
+- 6 new tests — 298 total
+
 ## [1.3.0] — 2026-03-15
 
 ### Added
