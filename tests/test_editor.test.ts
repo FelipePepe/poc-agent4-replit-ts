@@ -146,4 +146,43 @@ describe("makeEditorNode", () => {
     const [args] = (mockTools.write_file as ReturnType<typeof vi.fn>).mock.calls;
     expect(args[0]).toMatchObject({ path: "output.py" });
   });
+
+  it("uses empty string content when LLM returns non-string content (array)", async () => {
+    // Exercises line 94: typeof response.content === "string" ? ... : ""
+    // AIMessage content can be an array of content blocks (multimodal responses)
+    const { AIMessage: RealAIMessage } = await import("@langchain/core/messages");
+    const arrayContentMsg = new RealAIMessage({ content: [{ type: "text", text: "hello" }] });
+    mockLlm.invoke.mockResolvedValue(arrayContentMsg);
+    const node = makeEditorNode(mockLlm as never, mockTools);
+    await node(BASE_STATE);
+    // When content is not a string, parseCodeOutput("") returns null → fallback to output.py
+    expect(mockTools.write_file).toHaveBeenCalledTimes(1);
+    const [args] = (mockTools.write_file as ReturnType<typeof vi.fn>).mock.calls;
+    // Content is "", which is not valid JSON, so parseCodeOutput returns null → fallback
+    expect(args[0]).toMatchObject({ path: "output.py" });
+  });
+
+  it("leaves non-target subtasks unchanged when marking target as done (line 103 ternary)", async () => {
+    // Exercises line 103: s.id === target.id ? ... : s — the `: s` branch (non-target subtask)
+    const stateWithMultipleSubtasks = {
+      ...BASE_STATE,
+      subtasks: [
+        PENDING_SUBTASK, // s1 — this is the code task that will be processed
+        {
+          id: "s2",
+          description: "Search for something",
+          type: "search" as const,
+          status: "pending" as const,
+        },
+      ],
+    };
+    mockLlm.invoke.mockResolvedValue(new AIMessage(JSON.stringify({ path: "app.py", content: "code" })));
+    const node = makeEditorNode(mockLlm as never, mockTools);
+    const result = await node(stateWithMultipleSubtasks);
+    // s1 should be done, s2 should remain unchanged (the `:s` branch)
+    const s1 = result.subtasks?.find((s) => s.id === "s1");
+    const s2 = result.subtasks?.find((s) => s.id === "s2");
+    expect(s1?.status).toBe("done");
+    expect(s2?.status).toBe("pending");
+  });
 });

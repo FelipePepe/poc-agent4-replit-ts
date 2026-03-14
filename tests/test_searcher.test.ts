@@ -117,4 +117,32 @@ describe("makeSearcherNode", () => {
     const msg = result.messages![0];
     expect(msg.content.toString()).toContain("No search results");
   });
+
+  it("leaves non-target subtasks unchanged when updating the search subtask", async () => {
+    // Exercises line 49: the ternary branch where s.id !== target.id → returns s unchanged
+    const stateMultiple = {
+      ...BASE_STATE,
+      subtasks: [
+        {
+          id: "s1",
+          description: "Search how to add /ping in Flask",
+          type: "search" as const,
+          status: "pending" as const,
+        },
+        {
+          id: "s2",
+          description: "Write code",
+          type: "code" as const,
+          status: "pending" as const,
+        },
+      ],
+    };
+    const node = makeSearcherNode(mockTools);
+    const result = await node(stateMultiple);
+    // s1 should be done, s2 should remain pending
+    const s1 = result.subtasks?.find((s) => s.id === "s1");
+    const s2 = result.subtasks?.find((s) => s.id === "s2");
+    expect(s1?.status).toBe("done");
+    expect(s2?.status).toBe("pending");
+  });
 });

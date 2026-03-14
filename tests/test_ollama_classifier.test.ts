@@ -130,4 +130,69 @@ describe("createLlmClassifier", () => {
     expect(promptText).toContain("3"); // consecutiveErrors
     expect(promptText).toContain("Error: file not found");
   });
+
+  it("returns no-op when HTTP response is not ok (line 99)", async () => {
+    // Exercises: if (!response.ok) return NO_OP_RESULT
+    mockFetch.mockReturnValueOnce(
+      Promise.resolve({
+        ok: false,
+        json: () => Promise.resolve({}),
+      })
+    );
+    const { createLlmClassifier } = await import("../src/guidance/ollama_classifier");
+    const classifier = createLlmClassifier("http://localhost:11434", "phi3:mini");
+    const result = await classifier.classify(baseInput);
+    expect(result.shouldActivate).toBe(false);
+    expect(result.labels).toEqual([]);
+    expect(result.microInstructions).toEqual([]);
+  });
+
+  it("falls back to MICRO_INSTRUCTIONS when LLM microInstruction is empty string (lines 108-110)", async () => {
+    // Exercises: parsed.microInstruction?.trim() is falsy → falls back to MICRO_INSTRUCTIONS[situation]
+    mockFetch.mockReturnValueOnce(
+      ollamaResponse(JSON.stringify({ situation: "error-loop", microInstruction: "" }))
+    );
+    const { createLlmClassifier } = await import("../src/guidance/ollama_classifier");
+    const classifier = createLlmClassifier("http://localhost:11434", "phi3:mini");
+    const result = await classifier.classify(baseInput);
+    expect(result.shouldActivate).toBe(true);
+    expect(result.labels).toContain("error-loop");
+    // Should use MICRO_INSTRUCTIONS["error-loop"] as fallback
+    expect(result.microInstructions.length).toBeGreaterThan(0);
+    expect(result.microInstructions[0]).toContain("error loop");
+  });
+
+  it("falls back to MICRO_INSTRUCTIONS when LLM microInstruction is absent (undefined)", async () => {
+    // Exercises: parsed.microInstruction is undefined → parsed.microInstruction?.trim() is undefined (falsy)
+    mockFetch.mockReturnValueOnce(
+      ollamaResponse(JSON.stringify({ situation: "tool-failure" })) // no microInstruction key
+    );
+    const { createLlmClassifier } = await import("../src/guidance/ollama_classifier");
+    const classifier = createLlmClassifier("http://localhost:11434", "phi3:mini");
+    const result = await classifier.classify(baseInput);
+    expect(result.shouldActivate).toBe(true);
+    expect(result.labels).toContain("tool-failure");
+    expect(result.microInstructions.length).toBeGreaterThan(0);
+  });
+
+  it("returns empty microInstructions when both microInstruction and MICRO_INSTRUCTIONS fallback are empty (lines 108-115)", async () => {
+    // Exercises:
+    //   line 108-110: parsed.microInstruction?.trim() is "" (falsy)
+    //                 AND MICRO_INSTRUCTIONS[situation] is undefined (unknown situation label)
+    //                 → falls through to "" (line 110: || "")
+    //   line 115: microInstruction ? [microInstruction] : [] → uses [] (the false branch)
+    mockFetch.mockReturnValueOnce(
+      ollamaResponse(JSON.stringify({
+        situation: "unknown-custom-label", // not in MICRO_INSTRUCTIONS map
+        microInstruction: "",              // empty string → falsy
+      }))
+    );
+    const { createLlmClassifier } = await import("../src/guidance/ollama_classifier");
+    const classifier = createLlmClassifier("http://localhost:11434", "phi3:mini");
+    const result = await classifier.classify(baseInput);
+    // situation !== "no-issue" → shouldActivate: true
+    expect(result.shouldActivate).toBe(true);
+    // microInstruction ends up "" → microInstructions is []
+    expect(result.microInstructions).toEqual([]);
+  });
 });

@@ -251,4 +251,35 @@ describe("loadMcpTools — dynamic discovery (Fase 7 exit criterion)", () => {
     expect(typeof tools.execute_shell).toBe("function");
     expect(typeof tools.search_web).toBe("function");
   });
+
+  it("extractText returns empty string when no content item has type=text (line 35)", async () => {
+    // Exercises: content.find((c) => c.type === "text")?.text ?? ""
+    // The ?? "" fallback fires when find() returns undefined (no text-type item)
+    const clientNoText = {
+      listTools: vi.fn().mockResolvedValue({
+        tools: [{ name: "read_file" }],
+      }),
+      callTool: vi.fn().mockResolvedValue({
+        // Content array has no item with type="text"
+        content: [{ type: "image", data: "base64data" }],
+      }),
+    } as unknown as Client;
+
+    const tools = await loadMcpTools(clientNoText);
+    const result = await Promise.resolve(tools.read_file!({ path: "test.py" }));
+    // extractText returns "" when no text item found
+    expect(result).toBe("");
+  });
+
+  it("execute_shell uses empty array when args is undefined (line 84)", async () => {
+    // Exercises: args: args ?? []  — the ?? [] fallback when args is not provided
+    const client = makeMockClient(["execute_shell"], "output");
+    const tools = await loadMcpTools(client);
+    // Call execute_shell WITHOUT args (args is undefined)
+    await Promise.resolve(tools.execute_shell!({ command: "echo" }));
+    expect(client.callTool).toHaveBeenCalledWith({
+      name: "execute_shell",
+      arguments: { command: "echo", args: [] },
+    });
+  });
 });
