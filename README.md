@@ -144,6 +144,21 @@ curl http://localhost:3000/api/agent/tasks/<taskId>
 
 ---
 
+## Git Workflow
+
+Este proyecto sigue **GitFlow estricto**. Ver [`docs/git-workflow.md`](docs/git-workflow.md) para la referencia completa.
+
+```
+feature/* ──► develop ──► release/* ──► main (tag vX.Y.Z)
+                                   └──► develop (back-merge)
+```
+
+- `main` y `develop` están protegidas — **no hay commits directos**.
+- Toda integración es vía PR en GitHub.
+- Flujo de release: `release/vX.Y.Z` desde `develop` → PR a `main` → tag → back-merge a `develop`.
+
+---
+
 ## Security Design
 
 - **Deny-by-default**: all tool handlers must be explicitly provided; unknown shell commands are rejected at `tools.ts`.
