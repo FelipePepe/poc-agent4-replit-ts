@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1] — 2026-03-14
+
+### Changed
+- Migrated test runner from Jest/ts-jest to Vitest + @vitest/coverage-v8
+- Added SonarQube integration: `sonar-project.properties`, `scripts/run_sonar.sh`, `npm run sonar`
+- JUnit XML report for SonarQube via Vitest built-in junit reporter
+
 ## [1.0.0] — 2026-03-14
 
 ### Added
