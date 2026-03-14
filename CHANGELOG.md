@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.2.0] — 2026-03-14
+
+### Added
+- GitHub Actions CI workflow: typecheck → lint → test + coverage on every PR and push to develop
+- Coverage artifact uploaded (7-day retention)
+
 ## [1.1.1] — 2026-03-14
 
 ### Added
