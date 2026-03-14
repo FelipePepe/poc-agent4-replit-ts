@@ -1,10 +1,12 @@
 /**
  * tests/test_graph.test.ts
  *
- * Tests for core/graph.ts — Fase 0 + Fase 1
+ * Tests for core/graph.ts — Fase 0 + Fase 1 + Fase 3 (parallel routing)
  *
  * Fase 0: minimal single-node graph (START → supervisor → END).
  * Fase 1: ReAct loop (supervisor -(tool_calls)→ tool_executor → supervisor
+ *          → verifier → END).
+ * Fase 3: parallel routing (supervisor -(2+ pending subtasks)→ parallel_executor
  *          → verifier → END).
  */
 
@@ -260,5 +262,63 @@ describe("buildGraph Fase 1 — ReAct loop", () => {
       (m: { content?: unknown }) => typeof m.content === "string" && (m.content as string).includes("stdout")
     );
     expect(toolMsg).toBeDefined();
+  });
+
+  // -------------------------------------------------------------------------
+  // Fase 3 — Parallel routing
+  // -------------------------------------------------------------------------
+
+  it("routes to parallel_executor when initial state has 2+ pending subtasks", async () => {
+    // Mock LLM returns no tool_calls → router checks subtasks → parallel_executor
+    mockLlm.invoke.mockResolvedValue(new AIMessage("no tools needed"));
+
+    const workerCalled: string[] = [];
+    const graph = buildGraph({
+      config: loadConfig(TEST_ENV),
+      llm: mockLlm as unknown as GraphConfig["llm"],
+      parallelWorkers: {
+        code: async (subtask) => {
+          workerCalled.push(subtask.id);
+          return `result-${subtask.id}`;
+        },
+      },
+    });
+
+    await graph.invoke({
+      messages: [new HumanMessage("run parallel tasks")],
+      subtasks: [
+        { id: "s1", description: "write a", type: "code", status: "pending" },
+        { id: "s2", description: "write b", type: "code", status: "pending" },
+      ],
+    });
+
+    expect(workerCalled).toContain("s1");
+    expect(workerCalled).toContain("s2");
+  });
+
+  it("parallel path populates parallel_results after execution", async () => {
+    mockLlm.invoke.mockResolvedValue(new AIMessage("no tools"));
+
+    const graph = buildGraph({
+      config: loadConfig(TEST_ENV),
+      llm: mockLlm as unknown as GraphConfig["llm"],
+      parallelWorkers: {
+        code: async (subtask) => `output-${subtask.id}`,
+      },
+    });
+
+    const result = await graph.invoke({
+      messages: [new HumanMessage("parallel test")],
+      subtasks: [
+        { id: "p1", description: "task p1", type: "code", status: "pending" },
+        { id: "p2", description: "task p2", type: "code", status: "pending" },
+        { id: "p3", description: "task p3", type: "code", status: "pending" },
+      ],
+    });
+
+    expect(result.parallel_results).toHaveProperty("p1");
+    expect(result.parallel_results).toHaveProperty("p2");
+    expect(result.parallel_results).toHaveProperty("p3");
+    expect(result.parallel_results["_last_run"]).toMatchObject({ count: 3 });
   });
 });

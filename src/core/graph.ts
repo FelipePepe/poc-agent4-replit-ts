@@ -1,20 +1,19 @@
 /**
  * core/graph.ts
  *
- * LangGraph graph definition — Fase 0 + Fase 1.
+ * LangGraph graph definition — Fase 0 + Fase 1 + Fase 3 (parallelism).
  *
- * Fase 0 topology (single pass):
- *   START → supervisor → [verifier] → END
- *
- * Fase 1 topology (ReAct loop):
+ * Topology:
  *   START → supervisor
- *   supervisor -(tool_calls?)→ tool_executor → supervisor  (loop)
- *   supervisor -(no tool_calls)→ verifier → END
+ *   supervisor -(tool_calls?)→ tool_executor → supervisor  (ReAct loop)
+ *   supervisor -(2+ pending subtasks, no tool_calls)→ parallel_executor → verifier
+ *   supervisor -(otherwise)→ verifier → END
  *
  * Design:
  * - buildGraph(config) is a pure factory — injectable and testable.
  * - LLM and tools are injected via GraphConfig; tests pass mocks.
  * - tool_executor maps tool_call.name → GraphTools function.
+ * - parallel_executor fans-out pending subtasks concurrently (Fase 3).
  * - verifier is a Fase 1 pass-through; will grow in Fase 2+.
  */
 
@@ -24,6 +23,10 @@ import type { BaseChatModel } from "@langchain/core/language_models/chat_models"
 import { AgentStateAnnotation, type AgentState } from "./state";
 import type { Config } from "./config";
 import type { ShellResult } from "./tools";
+import {
+  makeParallelExecutorNode,
+  type WorkerMap,
+} from "../agents/parallel_executor";
 
 // ---------------------------------------------------------------------------
 // GraphTools — plain-function interface for sandbox tools
@@ -48,6 +51,8 @@ export interface GraphConfig {
   llm: BaseChatModel;
   /** Optional tools injected for test isolation. */
   tools?: GraphTools;
+  /** Optional parallel worker map injected for Fase 3 (default: empty). */
+  parallelWorkers?: WorkerMap;
 }
 
 // ---------------------------------------------------------------------------
@@ -79,7 +84,7 @@ function makeSupervisorNode(llm: BaseChatModel) {
 
 function supervisorRouter(
   state: AgentState
-): "tool_executor" | "verifier" {
+): "tool_executor" | "parallel_executor" | "verifier" {
   const lastMessage = state.messages[state.messages.length - 1];
   if (
     lastMessage instanceof AIMessage &&
@@ -87,6 +92,11 @@ function supervisorRouter(
     lastMessage.tool_calls.length > 0
   ) {
     return "tool_executor";
+  }
+  // Fase 3: fan-out when there are 2+ independent pending subtasks
+  const pendingCount = state.subtasks.filter((s) => s.status === "pending").length;
+  if (pendingCount >= 2) {
+    return "parallel_executor";
   }
   return "verifier";
 }
@@ -169,18 +179,21 @@ async function verifierNode(
 // ---------------------------------------------------------------------------
 
 export function buildGraph(graphConfig: GraphConfig) {
-  const { llm, tools = {} } = graphConfig;
+  const { llm, tools = {}, parallelWorkers = {} } = graphConfig;
 
   const graph = new StateGraph(AgentStateAnnotation)
     .addNode("supervisor", makeSupervisorNode(llm))
     .addNode("tool_executor", makeToolExecutorNode(tools))
+    .addNode("parallel_executor", makeParallelExecutorNode(parallelWorkers))
     .addNode("verifier", verifierNode)
     .addEdge(START, "supervisor")
     .addConditionalEdges("supervisor", supervisorRouter, {
       tool_executor: "tool_executor",
+      parallel_executor: "parallel_executor",
       verifier: "verifier",
     })
     .addEdge("tool_executor", "supervisor")
+    .addEdge("parallel_executor", "verifier")
     .addEdge("verifier", END);
 
   return graph.compile();
