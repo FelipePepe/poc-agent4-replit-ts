@@ -387,4 +387,27 @@ describe("createApp with GraphRunner", () => {
     expect(res.status).toBe(201);
     expect(res.body.data.status).toBe("queued");
   });
+
+  it("when graph runner rejects with non-Error value, uses String(err) in result (line 262)", async () => {
+    // Exercises: err instanceof Error ? err.message : String(err) — the String(err) branch
+    let rejectRunner!: (err: unknown) => void;
+    const graphRunner: GraphRunner = (_prompt) =>
+      new Promise<{ artifacts: string[] }>((_resolve, reject) => { rejectRunner = reject; });
+
+    const service = new InMemoryTaskService();
+    const app = createApp(service, graphRunner);
+
+    const res = await request(app)
+      .post("/api/agent/tasks")
+      .send({ prompt: "fail with non-error" });
+    const taskId = res.body.data.taskId as string;
+
+    // Reject with a plain string (not an Error instance)
+    rejectRunner("plain string error");
+    await new Promise((r) => setTimeout(r, 20));
+
+    const task = service.getTask(taskId)!;
+    expect(task.status).toBe("failed");
+    expect(task.result).toBe("plain string error");
+  });
 });
