@@ -13,6 +13,7 @@
 import { HumanMessage, AIMessage } from "@langchain/core/messages";
 import { buildGraph, type GraphConfig, type GraphTools } from "../src/core/graph";
 import { loadConfig } from "../src/core/config";
+import { makeTrajectoryClassifier } from "../src/guidance/classifier";
 
 const TEST_ENV = {
   ANTHROPIC_API_KEY: "sk-ant-test-key",
@@ -320,5 +321,83 @@ describe("buildGraph Fase 1 — ReAct loop", () => {
     expect(result.parallel_results).toHaveProperty("p2");
     expect(result.parallel_results).toHaveProperty("p3");
     expect(result.parallel_results["_last_run"]).toMatchObject({ count: 3 });
+  });
+
+  // -------------------------------------------------------------------------
+  // Fase 4 — Ephemeral classifier injection
+  // -------------------------------------------------------------------------
+
+  it("injects micro-instruction into LLM call when consecutive_errors >= 2", async () => {
+    const capturedArgs: unknown[][] = [];
+    mockLlm.invoke = jest.fn().mockImplementation(async (msgs: unknown[]) => {
+      capturedArgs.push(msgs);
+      return new AIMessage("response");
+    });
+
+    const graph = buildGraph({
+      config: loadConfig(TEST_ENV),
+      llm: mockLlm as unknown as GraphConfig["llm"],
+      classifier: makeTrajectoryClassifier(),
+    });
+
+    await graph.invoke({
+      messages: [new HumanMessage("help")],
+      consecutive_errors: 3,  // triggers "error-loop"
+    });
+
+    // The LLM should have been called with a [GUIDANCE] message
+    expect(capturedArgs.length).toBeGreaterThan(0);
+    const lastCall = capturedArgs[capturedArgs.length - 1];
+    const hasGuidance = lastCall.some(
+      (m) =>
+        typeof (m as { content?: unknown }).content === "string" &&
+        ((m as { content: string }).content as string).includes("[GUIDANCE]")
+    );
+    expect(hasGuidance).toBe(true);
+  });
+
+  it("sets active_instructions in state after classifier injection", async () => {
+    mockLlm.invoke.mockResolvedValue(new AIMessage("ok"));
+
+    const graph = buildGraph({
+      config: loadConfig(TEST_ENV),
+      llm: mockLlm as unknown as GraphConfig["llm"],
+      classifier: makeTrajectoryClassifier(),
+    });
+
+    const result = await graph.invoke({
+      messages: [new HumanMessage("task")],
+      consecutive_errors: 3,
+    });
+
+    expect(Array.isArray(result.active_instructions)).toBe(true);
+    expect(result.active_instructions.length).toBeGreaterThan(0);
+  });
+
+  it("does NOT inject when consecutive_errors < 2 (no activation)", async () => {
+    const capturedArgs: unknown[][] = [];
+    mockLlm.invoke = jest.fn().mockImplementation(async (msgs: unknown[]) => {
+      capturedArgs.push(msgs);
+      return new AIMessage("fine");
+    });
+
+    const graph = buildGraph({
+      config: loadConfig(TEST_ENV),
+      llm: mockLlm as unknown as GraphConfig["llm"],
+      classifier: makeTrajectoryClassifier(),
+    });
+
+    await graph.invoke({
+      messages: [new HumanMessage("all good")],
+      consecutive_errors: 0,
+    });
+
+    const lastCall = capturedArgs[capturedArgs.length - 1];
+    const hasGuidance = lastCall.some(
+      (m) =>
+        typeof (m as { content?: unknown }).content === "string" &&
+        ((m as { content: string }).content as string).includes("[GUIDANCE]")
+    );
+    expect(hasGuidance).toBe(false);
   });
 });

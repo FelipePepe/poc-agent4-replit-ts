@@ -1,7 +1,7 @@
 /**
  * core/graph.ts
  *
- * LangGraph graph definition — Fase 0 + Fase 1 + Fase 3 (parallelism).
+ * LangGraph graph definition — Fase 0 + Fase 1 + Fase 3 + Fase 4.
  *
  * Topology:
  *   START → supervisor
@@ -9,12 +9,11 @@
  *   supervisor -(2+ pending subtasks, no tool_calls)→ parallel_executor → verifier
  *   supervisor -(otherwise)→ verifier → END
  *
- * Design:
- * - buildGraph(config) is a pure factory — injectable and testable.
- * - LLM and tools are injected via GraphConfig; tests pass mocks.
- * - tool_executor maps tool_call.name → GraphTools function.
- * - parallel_executor fans-out pending subtasks concurrently (Fase 3).
- * - verifier is a Fase 1 pass-through; will grow in Fase 2+.
+ * Fase 4 — ephemeral classifier injection:
+ *   Before each LLM call the supervisor checks consecutiveErrors / token count.
+ *   When the classifier activates it appends a SystemMessage with micro-instructions
+ *   to the LLM call context ONLY (never stored in state.messages).
+ *   active_instructions in state tracks what was injected for logging.
  */
 
 import { StateGraph, START, END } from "@langchain/langgraph";
@@ -27,6 +26,11 @@ import {
   makeParallelExecutorNode,
   type WorkerMap,
 } from "../agents/parallel_executor";
+import {
+  makeTrajectoryClassifier,
+  ACTIVATION_THRESHOLD,
+} from "../guidance/classifier";
+import type { BaseMessage } from "@langchain/core/messages";
 
 // ---------------------------------------------------------------------------
 // GraphTools — plain-function interface for sandbox tools
@@ -53,13 +57,37 @@ export interface GraphConfig {
   tools?: GraphTools;
   /** Optional parallel worker map injected for Fase 3 (default: empty). */
   parallelWorkers?: WorkerMap;
+  /**
+   * Optional classifier for Fase 4 ephemeral injection.
+   * When provided, the supervisor calls it on every step where
+   * consecutiveErrors >= ACTIVATION_THRESHOLD to get micro-instructions.
+   */
+  classifier?: ReturnType<typeof makeTrajectoryClassifier>;
+}
+
+// ---------------------------------------------------------------------------
+// Token estimation
+// ---------------------------------------------------------------------------
+
+/**
+ * Rough token count: 1 token ≈ 4 characters.
+ * Good enough for the activation gate — no external tokeniser needed.
+ */
+function estimateTokens(messages: BaseMessage[]): number {
+  return messages.reduce((sum, m) => {
+    const content = typeof m.content === "string" ? m.content : JSON.stringify(m.content);
+    return sum + Math.ceil(content.length / 4);
+  }, 0);
 }
 
 // ---------------------------------------------------------------------------
 // Supervisor node — calls LLM, returns response
 // ---------------------------------------------------------------------------
 
-function makeSupervisorNode(llm: BaseChatModel) {
+function makeSupervisorNode(
+  llm: BaseChatModel,
+  classifier?: ReturnType<typeof makeTrajectoryClassifier>
+) {
   return async function supervisorNode(
     state: AgentState
   ): Promise<Partial<AgentState>> {
@@ -68,12 +96,35 @@ function makeSupervisorNode(llm: BaseChatModel) {
         "Analyse the user request and use the available tools when needed."
     );
 
-    const response = await llm.invoke([systemMessage, ...state.messages]);
+    // ------------------------------------------------------------------
+    // Fase 4: ephemeral classifier injection
+    // ------------------------------------------------------------------
+    let activeInstructions: string[] = [];
+    const contextMessages: BaseMessage[] = [...state.messages];
+
+    if (classifier && state.consecutive_errors >= ACTIVATION_THRESHOLD) {
+      const classResult = classifier.classify({
+        consecutiveErrors: state.consecutive_errors,
+        tokenCount: estimateTokens(state.messages),
+      });
+      if (classResult.shouldActivate && classResult.microInstructions.length > 0) {
+        // Inject at END — NOT stored in state.messages
+        contextMessages.push(
+          new SystemMessage(
+            "[GUIDANCE] " + classResult.microInstructions.join(" ")
+          )
+        );
+        activeInstructions = classResult.microInstructions;
+      }
+    }
+
+    const response = await llm.invoke([systemMessage, ...contextMessages]);
 
     return {
       messages: [response],
       active_agent: "supervisor",
       current_model: state.current_model,
+      active_instructions: activeInstructions,
     };
   };
 }
@@ -179,10 +230,10 @@ async function verifierNode(
 // ---------------------------------------------------------------------------
 
 export function buildGraph(graphConfig: GraphConfig) {
-  const { llm, tools = {}, parallelWorkers = {} } = graphConfig;
+  const { llm, tools = {}, parallelWorkers = {}, classifier } = graphConfig;
 
   const graph = new StateGraph(AgentStateAnnotation)
-    .addNode("supervisor", makeSupervisorNode(llm))
+    .addNode("supervisor", makeSupervisorNode(llm, classifier))
     .addNode("tool_executor", makeToolExecutorNode(tools))
     .addNode("parallel_executor", makeParallelExecutorNode(parallelWorkers))
     .addNode("verifier", verifierNode)
