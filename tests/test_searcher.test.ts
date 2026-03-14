@@ -5,6 +5,7 @@
  * TDD: these tests must fail before src/agents/searcher.ts exists.
  */
 
+import { vi } from 'vitest';
 import { HumanMessage, AIMessage } from "@langchain/core/messages";
 import { makeSearcherNode } from "../src/agents/searcher";
 import type { AgentState } from "../src/core/state";
@@ -37,10 +38,10 @@ const BASE_STATE: AgentState = {
 };
 
 const mockTools: Required<GraphTools> = {
-  write_file: jest.fn(),
-  read_file: jest.fn().mockReturnValue(""),
-  execute_shell: jest.fn().mockReturnValue({ stdout: "", stderr: "", exitCode: 0 }),
-  search_web: jest.fn().mockReturnValue("[Search results: Flask /ping example code]"),
+  write_file: vi.fn(),
+  read_file: vi.fn().mockReturnValue(""),
+  execute_shell: vi.fn().mockReturnValue({ stdout: "", stderr: "", exitCode: 0 }),
+  search_web: vi.fn().mockReturnValue("[Search results: Flask /ping example code]"),
 };
 
 // ---------------------------------------------------------------------------
@@ -49,8 +50,8 @@ const mockTools: Required<GraphTools> = {
 
 describe("makeSearcherNode", () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-    mockTools.search_web = jest.fn().mockReturnValue("[Search results: Flask /ping example code]");
+    vi.clearAllMocks();
+    mockTools.search_web = vi.fn().mockReturnValue("[Search results: Flask /ping example code]");
   });
 
   it("returns a callable node function", () => {
@@ -62,7 +63,7 @@ describe("makeSearcherNode", () => {
     const node = makeSearcherNode(mockTools);
     await node(BASE_STATE);
     expect(mockTools.search_web).toHaveBeenCalledTimes(1);
-    const [args] = (mockTools.search_web as jest.Mock).mock.calls;
+    const [args] = (mockTools.search_web as ReturnType<typeof vi.fn>).mock.calls;
     expect(args[0]).toMatchObject({ query: expect.any(String) });
   });
 

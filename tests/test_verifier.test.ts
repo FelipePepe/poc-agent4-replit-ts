@@ -5,6 +5,7 @@
  * TDD: these tests must fail before src/agents/verifier.ts exists.
  */
 
+import { vi } from 'vitest';
 import { HumanMessage } from "@langchain/core/messages";
 import { makeVerifierNode } from "../src/agents/verifier";
 import type { AgentState } from "../src/core/state";
@@ -38,10 +39,10 @@ const BASE_STATE: AgentState = {
 };
 
 const mockTools: Required<GraphTools> = {
-  write_file: jest.fn(),
-  read_file: jest.fn().mockReturnValue("from flask import Flask"),
-  execute_shell: jest.fn().mockReturnValue({ stdout: "1 passed", stderr: "", exitCode: 0 }),
-  search_web: jest.fn().mockReturnValue(""),
+  write_file: vi.fn(),
+  read_file: vi.fn().mockReturnValue("from flask import Flask"),
+  execute_shell: vi.fn().mockReturnValue({ stdout: "1 passed", stderr: "", exitCode: 0 }),
+  search_web: vi.fn().mockReturnValue(""),
 };
 
 // ---------------------------------------------------------------------------
@@ -50,9 +51,9 @@ const mockTools: Required<GraphTools> = {
 
 describe("makeVerifierNode", () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-    mockTools.execute_shell = jest.fn().mockReturnValue({ stdout: "1 passed", stderr: "", exitCode: 0 });
-    mockTools.read_file = jest.fn().mockReturnValue("from flask import Flask");
+    vi.clearAllMocks();
+    mockTools.execute_shell = vi.fn().mockReturnValue({ stdout: "1 passed", stderr: "", exitCode: 0 });
+    mockTools.read_file = vi.fn().mockReturnValue("from flask import Flask");
   });
 
   it("returns a callable node function", () => {
@@ -82,7 +83,7 @@ describe("makeVerifierNode", () => {
   });
 
   it("increments consecutive_errors when execute_shell returns non-zero", async () => {
-    mockTools.execute_shell = jest.fn().mockReturnValue({ stdout: "", stderr: "FAILED", exitCode: 1 });
+    mockTools.execute_shell = vi.fn().mockReturnValue({ stdout: "", stderr: "FAILED", exitCode: 1 });
     const node = makeVerifierNode(mockTools);
     const result = await node(BASE_STATE);
     expect((result.consecutive_errors ?? 0) + (result.error_count ?? 0)).toBeGreaterThan(0);

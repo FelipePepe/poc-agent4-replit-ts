@@ -10,6 +10,7 @@
  *          → verifier → END).
  */
 
+import { vi } from 'vitest';
 import { HumanMessage, AIMessage } from "@langchain/core/messages";
 import { buildGraph, type GraphConfig, type GraphTools } from "../src/core/graph";
 import { loadConfig } from "../src/core/config";
@@ -23,15 +24,15 @@ const TEST_ENV = {
 
 // Mock LLM that avoids real API calls
 const mockLlm = {
-  invoke: jest.fn().mockResolvedValue(new AIMessage("mocked response")),
-  bindTools: jest.fn().mockReturnThis(),
+  invoke: vi.fn().mockResolvedValue(new AIMessage("mocked response")),
+  bindTools: vi.fn().mockReturnThis(),
 };
 
 describe("buildGraph", () => {
   let graphConfig: GraphConfig;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     graphConfig = {
       config: loadConfig(TEST_ENV),
       llm: mockLlm as unknown as GraphConfig["llm"],
@@ -111,13 +112,13 @@ describe("buildGraph Fase 1 — ReAct loop", () => {
   let fase1Config: GraphConfig;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     mockTools = {
-      write_file: jest.fn(),
-      read_file: jest.fn().mockReturnValue(""),
-      execute_shell: jest.fn().mockReturnValue({ stdout: "", stderr: "", exitCode: 0 }),
-      search_web: jest.fn().mockReturnValue("stub results"),
+      write_file: vi.fn(),
+      read_file: vi.fn().mockReturnValue(""),
+      execute_shell: vi.fn().mockReturnValue({ stdout: "", stderr: "", exitCode: 0 }),
+      search_web: vi.fn().mockReturnValue("stub results"),
     };
 
     fase1Config = {
@@ -209,7 +210,7 @@ describe("buildGraph Fase 1 — ReAct loop", () => {
       content: "",
       tool_calls: [{ id: "tc-throw", name: "write_file", args: { path: "x.py", content: "bad" } }],
     });
-    mockTools.write_file = jest.fn().mockImplementation(() => {
+    mockTools.write_file = vi.fn().mockImplementation(() => {
       throw new Error("disk write failed");
     });
     mockLlm.invoke
@@ -250,7 +251,7 @@ describe("buildGraph Fase 1 — ReAct loop", () => {
     });
 
     // execute_shell mock returns a ShellResult object (non-string)
-    mockTools.execute_shell = jest.fn().mockReturnValue({ stdout: "hi\n", stderr: "", exitCode: 0 });
+    mockTools.execute_shell = vi.fn().mockReturnValue({ stdout: "hi\n", stderr: "", exitCode: 0 });
 
     mockLlm.invoke
       .mockResolvedValueOnce(shellCallMsg)
@@ -330,7 +331,7 @@ describe("buildGraph Fase 1 — ReAct loop", () => {
 
   it("injects micro-instruction into LLM call when consecutive_errors >= 2", async () => {
     const capturedArgs: unknown[][] = [];
-    mockLlm.invoke = jest.fn().mockImplementation(async (msgs: unknown[]) => {
+    mockLlm.invoke = vi.fn().mockImplementation(async (msgs: unknown[]) => {
       capturedArgs.push(msgs);
       return new AIMessage("response");
     });
@@ -377,7 +378,7 @@ describe("buildGraph Fase 1 — ReAct loop", () => {
 
   it("does NOT inject when consecutive_errors < 2 (no activation)", async () => {
     const capturedArgs: unknown[][] = [];
-    mockLlm.invoke = jest.fn().mockImplementation(async (msgs: unknown[]) => {
+    mockLlm.invoke = vi.fn().mockImplementation(async (msgs: unknown[]) => {
       capturedArgs.push(msgs);
       return new AIMessage("fine");
     });
@@ -407,9 +408,9 @@ describe("buildGraph Fase 1 — ReAct loop", () => {
   // -------------------------------------------------------------------------
 
   it("uses fallback LLM when consecutive_errors >= FALLBACK_THRESHOLD", async () => {
-    const mainLlm = { invoke: jest.fn().mockResolvedValue(new AIMessage("main")) };
-    const fallbackLlm = { invoke: jest.fn().mockResolvedValue(new AIMessage("fallback")) };
-    const localLlm = { invoke: jest.fn().mockResolvedValue(new AIMessage("local")) };
+    const mainLlm = { invoke: vi.fn().mockResolvedValue(new AIMessage("main")) };
+    const fallbackLlm = { invoke: vi.fn().mockResolvedValue(new AIMessage("fallback")) };
+    const localLlm = { invoke: vi.fn().mockResolvedValue(new AIMessage("local")) };
 
     const router = makeModelRouter(
       { fallback: FALLBACK_THRESHOLD, local: LOCAL_THRESHOLD },
@@ -434,8 +435,8 @@ describe("buildGraph Fase 1 — ReAct loop", () => {
   });
 
   it("increments model_switches and updates current_model on switch", async () => {
-    const mainLlm = { invoke: jest.fn().mockResolvedValue(new AIMessage("ok")) };
-    const fallbackLlm = { invoke: jest.fn().mockResolvedValue(new AIMessage("fallback ok")) };
+    const mainLlm = { invoke: vi.fn().mockResolvedValue(new AIMessage("ok")) };
+    const fallbackLlm = { invoke: vi.fn().mockResolvedValue(new AIMessage("fallback ok")) };
 
     const router = makeModelRouter(
       { fallback: FALLBACK_THRESHOLD, local: LOCAL_THRESHOLD },

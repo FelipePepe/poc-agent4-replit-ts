@@ -11,6 +11,7 @@
  *   - consecutive_errors drops to 0 → auto-return to main model
  */
 
+import { vi } from 'vitest';
 import {
   selectModelName,
   makeModelRouter,
@@ -79,7 +80,7 @@ describe("makeModelRouter", () => {
   // Mock LLMs
   const makeMockLlm = (name: string) => ({
     name,
-    invoke: jest.fn().mockResolvedValue({ content: `response from ${name}` }),
+    invoke: vi.fn().mockResolvedValue({ content: `response from ${name}` }),
   });
 
   it("returns a router with selectFor method", () => {
