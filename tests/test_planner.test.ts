@@ -5,6 +5,7 @@
  * TDD: these tests must fail before src/agents/planner.ts exists.
  */
 
+import { vi } from 'vitest';
 import { HumanMessage, AIMessage } from "@langchain/core/messages";
 import { makePlannerNode } from "../src/agents/planner";
 import type { AgentState, Subtask } from "../src/core/state";
@@ -35,8 +36,8 @@ const VALID_SUBTASKS: Subtask[] = [
 ];
 
 const mockLlm = {
-  invoke: jest.fn(),
-  bindTools: jest.fn().mockReturnThis(),
+  invoke: vi.fn(),
+  bindTools: vi.fn().mockReturnThis(),
 };
 
 // ---------------------------------------------------------------------------
@@ -44,7 +45,7 @@ const mockLlm = {
 // ---------------------------------------------------------------------------
 
 describe("makePlannerNode", () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => vi.clearAllMocks());
 
   it("returns a callable node function", () => {
     const node = makePlannerNode(mockLlm as never);

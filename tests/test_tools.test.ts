@@ -12,6 +12,7 @@
  *   - searchWeb: stub returns non-empty string
  */
 
+import { vi } from 'vitest';
 import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync } from "fs";
 import os from "os";
 import path from "path";
@@ -46,7 +47,7 @@ beforeEach(() => {
 
 afterEach(() => {
   rmSync(sandboxDir, { recursive: true, force: true });
-  jest.restoreAllMocks();
+  vi.restoreAllMocks();
 });
 
 // ---------------------------------------------------------------------------

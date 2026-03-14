@@ -14,6 +14,7 @@
  * without hardcoding them in GraphConfig.
  */
 
+import { vi } from 'vitest';
 import { makeMcpServer, type McpToolHandlers } from "../src/mcp/server";
 import { loadMcpTools } from "../src/mcp/client";
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -22,18 +23,21 @@ import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 // McpServer mock — capture server.tool() registrations without async side-effects
 // ---------------------------------------------------------------------------
 
-const mockToolFn = jest.fn();
-const mockConnectFn = jest.fn().mockResolvedValue(undefined);
-const mockCloseFn = jest.fn().mockResolvedValue(undefined);
+// vi.hoisted ensures these variables are available inside vi.mock() factories
+const { mockToolFn, mockConnectFn, mockCloseFn, mockServerInstance } = vi.hoisted(() => {
+  const mockToolFn = vi.fn();
+  const mockConnectFn = vi.fn().mockResolvedValue(undefined);
+  const mockCloseFn = vi.fn().mockResolvedValue(undefined);
+  const mockServerInstance = {
+    tool: mockToolFn,
+    connect: mockConnectFn,
+    close: mockCloseFn,
+  };
+  return { mockToolFn, mockConnectFn, mockCloseFn, mockServerInstance };
+});
 
-const mockServerInstance = {
-  tool: mockToolFn,
-  connect: mockConnectFn,
-  close: mockCloseFn,
-};
-
-jest.mock("@modelcontextprotocol/sdk/server/mcp.js", () => ({
-  McpServer: jest.fn().mockImplementation(() => mockServerInstance),
+vi.mock("@modelcontextprotocol/sdk/server/mcp.js", () => ({
+  McpServer: vi.fn(function () { return mockServerInstance; }),
 }));
 
 beforeEach(() => {
@@ -114,7 +118,7 @@ describe("makeMcpServer", () => {
   });
 
   it("invokes the readFile handler when the read_file tool callback fires", async () => {
-    const readFile = jest.fn().mockReturnValue("file content");
+    const readFile = vi.fn().mockReturnValue("file content");
     makeMcpServer({ readFile });
     const call = mockToolFn.mock.calls.find((c) => c[0] === "read_file");
     const cb = call![call!.length - 1] as (args: { path: string }) => unknown;
@@ -124,7 +128,7 @@ describe("makeMcpServer", () => {
   });
 
   it("invokes the writeFile handler when the write_file tool callback fires", async () => {
-    const writeFile = jest.fn();
+    const writeFile = vi.fn();
     makeMcpServer({ writeFile });
     const call = mockToolFn.mock.calls.find((c) => c[0] === "write_file");
     const cb = call![call!.length - 1] as (args: { path: string; content: string }) => unknown;
@@ -134,7 +138,7 @@ describe("makeMcpServer", () => {
   });
 
   it("invokes the executeShell handler when the execute_shell tool callback fires", async () => {
-    const executeShell = jest.fn().mockReturnValue("output");
+    const executeShell = vi.fn().mockReturnValue("output");
     makeMcpServer({ executeShell });
     const call = mockToolFn.mock.calls.find((c) => c[0] === "execute_shell");
     const cb = call![call!.length - 1] as (args: { command: string; args?: string[] }) => unknown;
@@ -159,10 +163,10 @@ describe("makeMcpServer", () => {
 
 function makeMockClient(toolNames: string[], callText = "result"): Client {
   return {
-    listTools: jest.fn().mockResolvedValue({
+    listTools: vi.fn().mockResolvedValue({
       tools: toolNames.map((name) => ({ name })),
     }),
-    callTool: jest.fn().mockResolvedValue({
+    callTool: vi.fn().mockResolvedValue({
       content: [{ type: "text", text: callText }],
     }),
   } as unknown as Client;
