@@ -9,7 +9,10 @@ The original spec is in the sibling Python project (`poc-agent4-prompt-v2.md`). 
 ## Architecture
 
 ```
+GET  /api-docs/           ← Swagger UI (OpenAPI 3.0)
 POST /api/agent/tasks
+GET  /api/agent/tasks/:id
+GET  /health
        │
        ▼
   createApp()  ─── InMemoryTaskService
@@ -54,8 +57,9 @@ POST /api/agent/tasks
 | `src/snapshots/engine.ts` | SnapshotEngine: git commit + SQLite metadata |
 | `src/mcp/server.ts` | MCP tool server with deny-by-default registration |
 | `src/mcp/client.ts` | loadMcpTools() — dynamic tool discovery at runtime |
-| `src/api/server.ts` | Express REST API (createApp factory) |
+| `src/api/server.ts` | Express REST API (createApp factory) + OpenAPI 3.0 spec |
 | `src/api/task_service.ts` | InMemoryTaskService |
+| `src/api/index.ts` | Entry point — boots Express on `PORT` (default 3000) |
 
 ---
 
@@ -101,17 +105,24 @@ cp .env.example .env        # set ANTHROPIC_API_KEY, LANGSMITH_API_KEY
 npm test
 
 # Type-check only
-npx tsc --noEmit
+npm run typecheck
 
 # Lint
-npx eslint src/ tests/
+npm run lint
 
-# Start the REST API (demo)
-npx ts-node -e "
-const { createApp } = require('./src/api/server');
-const app = createApp();
-app.listen(3000, () => console.log('API listening on :3000'));
-"
+# Start the REST API in dev mode (tsx, hot-reload)
+npm run dev
+
+# Build and start compiled output
+npm run build
+npm start
+```
+
+### REST API
+
+```bash
+# Swagger UI (interactive docs)
+open http://localhost:3000/api-docs/
 
 # Health check
 curl http://localhost:3000/health
@@ -122,7 +133,7 @@ curl -X POST http://localhost:3000/api/agent/tasks \
      -d '{"prompt": "create a Flask CRUD API with tests"}'
 
 # Get task status
-curl http://localhost:3000/api/agent/tasks/\<taskId\>
+curl http://localhost:3000/api/agent/tasks/<taskId>
 ```
 
 ---
