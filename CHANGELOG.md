@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.1.0] — 2026-03-14
+
+### Added
+- Real LangGraph execution wired from REST API via injectable `GraphRunner`
+- `POST /api/agent/tasks` now returns `"processing"` immediately and runs the graph in background
+- On success: task transitions to `"completed"` with `artifacts`; on failure: `"failed"` with error message
+- `InMemoryTaskService`: persists prompt, new `updateTask()` for partial patches
+- 13 new tests — 286 total
+
 ## [1.0.1] — 2026-03-14
 
 ### Changed
