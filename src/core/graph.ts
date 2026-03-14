@@ -1,7 +1,7 @@
 /**
  * core/graph.ts
  *
- * LangGraph graph definition — Fase 0 + Fase 1 + Fase 3 + Fase 4.
+ * LangGraph graph definition — Fase 0 + Fase 1 + Fase 3 + Fase 4 + Fase 5.
  *
  * Topology:
  *   START → supervisor
@@ -14,6 +14,11 @@
  *   When the classifier activates it appends a SystemMessage with micro-instructions
  *   to the LLM call context ONLY (never stored in state.messages).
  *   active_instructions in state tracks what was injected for logging.
+ *
+ * Fase 5 — model switching anti-doom-loop:
+ *   Supervisor selects model based on consecutive_errors using the injected
+ *   modelRouter. On every model change, model_switches is incremented and
+ *   current_model is updated. Auto-returns to main model when errors resolve.
  */
 
 import { StateGraph, START, END } from "@langchain/langgraph";
@@ -30,6 +35,7 @@ import {
   makeTrajectoryClassifier,
   ACTIVATION_THRESHOLD,
 } from "../guidance/classifier";
+import { makeModelRouter } from "./models";
 import type { BaseMessage } from "@langchain/core/messages";
 
 // ---------------------------------------------------------------------------
@@ -63,6 +69,12 @@ export interface GraphConfig {
    * consecutiveErrors >= ACTIVATION_THRESHOLD to get micro-instructions.
    */
   classifier?: ReturnType<typeof makeTrajectoryClassifier>;
+  /**
+   * Optional model router for Fase 5 anti-doom-loop switching.
+   * When provided, the supervisor selects the appropriate LLM based on
+   * consecutive_errors and increments model_switches on transitions.
+   */
+  modelRouter?: ReturnType<typeof makeModelRouter>;
 }
 
 // ---------------------------------------------------------------------------
@@ -86,7 +98,8 @@ function estimateTokens(messages: BaseMessage[]): number {
 
 function makeSupervisorNode(
   llm: BaseChatModel,
-  classifier?: ReturnType<typeof makeTrajectoryClassifier>
+  classifier?: ReturnType<typeof makeTrajectoryClassifier>,
+  modelRouter?: ReturnType<typeof makeModelRouter>
 ) {
   return async function supervisorNode(
     state: AgentState
@@ -95,6 +108,17 @@ function makeSupervisorNode(
       "You are a supervisor agent coordinating a multi-agent system. " +
         "Analyse the user request and use the available tools when needed."
     );
+
+    // ------------------------------------------------------------------
+    // Fase 5: select active model based on consecutive_errors
+    // ------------------------------------------------------------------
+    const activeLlm = modelRouter?.selectFor(state.consecutive_errors) ?? llm;
+    const switchedTo = modelRouter?.detectSwitch(
+      state.current_model,
+      state.consecutive_errors
+    ) ?? null;
+    const modelSwitches = state.model_switches + (switchedTo !== null ? 1 : 0);
+    const currentModel = switchedTo ?? state.current_model;
 
     // ------------------------------------------------------------------
     // Fase 4: ephemeral classifier injection
@@ -118,12 +142,13 @@ function makeSupervisorNode(
       }
     }
 
-    const response = await llm.invoke([systemMessage, ...contextMessages]);
+    const response = await activeLlm.invoke([systemMessage, ...contextMessages]);
 
     return {
       messages: [response],
       active_agent: "supervisor",
-      current_model: state.current_model,
+      current_model: currentModel,
+      model_switches: modelSwitches,
       active_instructions: activeInstructions,
     };
   };
@@ -230,10 +255,10 @@ async function verifierNode(
 // ---------------------------------------------------------------------------
 
 export function buildGraph(graphConfig: GraphConfig) {
-  const { llm, tools = {}, parallelWorkers = {}, classifier } = graphConfig;
+  const { llm, tools = {}, parallelWorkers = {}, classifier, modelRouter } = graphConfig;
 
   const graph = new StateGraph(AgentStateAnnotation)
-    .addNode("supervisor", makeSupervisorNode(llm, classifier))
+    .addNode("supervisor", makeSupervisorNode(llm, classifier, modelRouter))
     .addNode("tool_executor", makeToolExecutorNode(tools))
     .addNode("parallel_executor", makeParallelExecutorNode(parallelWorkers))
     .addNode("verifier", verifierNode)

@@ -14,6 +14,7 @@ import { HumanMessage, AIMessage } from "@langchain/core/messages";
 import { buildGraph, type GraphConfig, type GraphTools } from "../src/core/graph";
 import { loadConfig } from "../src/core/config";
 import { makeTrajectoryClassifier } from "../src/guidance/classifier";
+import { makeModelRouter, FALLBACK_THRESHOLD, LOCAL_THRESHOLD } from "../src/core/models";
 
 const TEST_ENV = {
   ANTHROPIC_API_KEY: "sk-ant-test-key",
@@ -399,5 +400,63 @@ describe("buildGraph Fase 1 — ReAct loop", () => {
         ((m as { content: string }).content as string).includes("[GUIDANCE]")
     );
     expect(hasGuidance).toBe(false);
+  });
+
+  // -------------------------------------------------------------------------
+  // Fase 5 — Model switching anti-doom-loop
+  // -------------------------------------------------------------------------
+
+  it("uses fallback LLM when consecutive_errors >= FALLBACK_THRESHOLD", async () => {
+    const mainLlm = { invoke: jest.fn().mockResolvedValue(new AIMessage("main")) };
+    const fallbackLlm = { invoke: jest.fn().mockResolvedValue(new AIMessage("fallback")) };
+    const localLlm = { invoke: jest.fn().mockResolvedValue(new AIMessage("local")) };
+
+    const router = makeModelRouter(
+      { fallback: FALLBACK_THRESHOLD, local: LOCAL_THRESHOLD },
+      { main: mainLlm as never, fallback: fallbackLlm as never, local: localLlm as never },
+      { main: "sonnet", fallback: "haiku", local: "ollama" }
+    );
+
+    const graph = buildGraph({
+      config: loadConfig(TEST_ENV),
+      llm: mainLlm as unknown as GraphConfig["llm"],
+      modelRouter: router,
+    });
+
+    await graph.invoke({
+      messages: [new HumanMessage("broken")],
+      consecutive_errors: 3,
+      current_model: "sonnet",
+    });
+
+    expect(fallbackLlm.invoke).toHaveBeenCalled();
+    expect(mainLlm.invoke).not.toHaveBeenCalled();
+  });
+
+  it("increments model_switches and updates current_model on switch", async () => {
+    const mainLlm = { invoke: jest.fn().mockResolvedValue(new AIMessage("ok")) };
+    const fallbackLlm = { invoke: jest.fn().mockResolvedValue(new AIMessage("fallback ok")) };
+
+    const router = makeModelRouter(
+      { fallback: FALLBACK_THRESHOLD, local: LOCAL_THRESHOLD },
+      { main: mainLlm as never, fallback: fallbackLlm as never, local: mainLlm as never },
+      { main: "sonnet", fallback: "haiku", local: "ollama" }
+    );
+
+    const graph = buildGraph({
+      config: loadConfig(TEST_ENV),
+      llm: mainLlm as unknown as GraphConfig["llm"],
+      modelRouter: router,
+    });
+
+    const result = await graph.invoke({
+      messages: [new HumanMessage("error loop")],
+      consecutive_errors: 3,
+      current_model: "sonnet",   // was on sonnet
+      model_switches: 0,
+    });
+
+    expect(result.model_switches).toBe(1);
+    expect(result.current_model).toBe("haiku");
   });
 });
