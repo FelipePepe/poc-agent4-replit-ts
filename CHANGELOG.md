@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.0] — 2026-03-15
+
+### Added
+- `src/api/graph_runner.ts`: `createGraphRunner()` factory — wires real LangGraph into REST API
+- `src/api/index.ts`: initializes graph runner on startup; degrades to queued mode if ANTHROPIC_API_KEY missing
+- 6 new tests — 292 total
+
 ## [1.2.0] — 2026-03-14
 
 ### Added
