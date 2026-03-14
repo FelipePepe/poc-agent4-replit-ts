@@ -1,0 +1,1 @@
+npx tsx scripts/git_hooks/validate_commit_msg.ts "$1"

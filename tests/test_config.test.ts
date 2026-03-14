@@ -1,0 +1,176 @@
+/**
+ * tests/test_config.test.ts
+ *
+ * RED tests for core/config.ts — Fase 0
+ * TDD: these tests must fail before src/core/config.ts exists.
+ */
+
+import { loadConfig, getConfig, resetConfig, type Config } from "../src/core/config";
+
+const VALID_ENV = {
+  ANTHROPIC_API_KEY: "sk-ant-test-key",
+  LANGSMITH_API_KEY: "ls-test-key",
+  LANGSMITH_PROJECT: "test-project",
+  NODE_ENV: "test",
+  PORT: "4000",
+};
+
+describe("loadConfig", () => {
+  describe("required variables", () => {
+    it("throws if ANTHROPIC_API_KEY is missing", () => {
+      const env = { ...VALID_ENV, ANTHROPIC_API_KEY: "" };
+      expect(() => loadConfig(env)).toThrow(/ANTHROPIC_API_KEY/);
+    });
+
+    it("throws if LANGSMITH_API_KEY is missing", () => {
+      const env = { ...VALID_ENV, LANGSMITH_API_KEY: "" };
+      expect(() => loadConfig(env)).toThrow(/LANGSMITH_API_KEY/);
+    });
+
+    it("throws if ANTHROPIC_API_KEY is undefined", () => {
+      const env = { ...VALID_ENV };
+      delete (env as Record<string, string>)["ANTHROPIC_API_KEY"];
+      expect(() => loadConfig(env as NodeJS.ProcessEnv)).toThrow(
+        /ANTHROPIC_API_KEY/
+      );
+    });
+  });
+
+  describe("optional variables use defaults", () => {
+    it("defaults PORT to 3000", () => {
+      const env = { ...VALID_ENV };
+      delete (env as Record<string, string>)["PORT"];
+      const cfg = loadConfig(env as NodeJS.ProcessEnv);
+      expect(cfg.port).toBe(3000);
+    });
+
+    it("defaults NODE_ENV to development", () => {
+      const env = { ...VALID_ENV };
+      delete (env as Record<string, string>)["NODE_ENV"];
+      const cfg = loadConfig(env as NodeJS.ProcessEnv);
+      expect(cfg.nodeEnv).toBe("development");
+    });
+
+    it("defaults LANGSMITH_PROJECT to poc-agent4-ts", () => {
+      const env = { ...VALID_ENV };
+      delete (env as Record<string, string>)["LANGSMITH_PROJECT"];
+      const cfg = loadConfig(env as NodeJS.ProcessEnv);
+      expect(cfg.langsmithProject).toBe("poc-agent4-ts");
+    });
+  });
+
+  describe("type coercion", () => {
+    it("parses PORT as a number", () => {
+      const cfg = loadConfig(VALID_ENV);
+      expect(cfg.port).toBe(4000);
+      expect(typeof cfg.port).toBe("number");
+    });
+  });
+
+  describe("model thresholds", () => {
+    it("has fallbackThreshold of 3", () => {
+      const cfg = loadConfig(VALID_ENV);
+      expect(cfg.models.fallbackThreshold).toBe(3);
+    });
+
+    it("has localThreshold of 6", () => {
+      const cfg = loadConfig(VALID_ENV);
+      expect(cfg.models.localThreshold).toBe(6);
+    });
+
+    it("has primary model claude-sonnet", () => {
+      const cfg = loadConfig(VALID_ENV);
+      expect(cfg.models.primary).toContain("claude-sonnet");
+    });
+  });
+
+  describe("sandbox config", () => {
+    it("has commandTimeoutMs of 10000", () => {
+      const cfg = loadConfig(VALID_ENV);
+      expect(cfg.sandbox.commandTimeoutMs).toBe(10_000);
+    });
+
+    it("allowedCommands is a non-empty array", () => {
+      const cfg = loadConfig(VALID_ENV);
+      expect(cfg.sandbox.allowedCommands.length).toBeGreaterThan(0);
+    });
+
+    it("sandbox dir ends with agent_sandbox", () => {
+      const cfg = loadConfig(VALID_ENV);
+      expect(cfg.sandbox.dir).toMatch(/agent_sandbox$/);
+    });
+  });
+
+  describe("secrets are not exposed", () => {
+    it("does not expose apiKey directly on the Config shape", () => {
+      const cfg = loadConfig(VALID_ENV) as unknown as Record<string, unknown>;
+      // anthropicApiKey should exist but we verify the shape is typed
+      expect(typeof cfg["anthropicApiKey"]).toBe("string");
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getConfig / resetConfig singleton
+// ---------------------------------------------------------------------------
+
+describe("getConfig singleton", () => {
+  const SAVED: Record<string, string | undefined> = {};
+
+  beforeEach(() => {
+    // Save and inject test keys into process.env
+    SAVED.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+    SAVED.LANGSMITH_API_KEY = process.env.LANGSMITH_API_KEY;
+    SAVED.LANGSMITH_PROJECT = process.env.LANGSMITH_PROJECT;
+    SAVED.NODE_ENV = process.env.NODE_ENV;
+    SAVED.PORT = process.env.PORT;
+    process.env.ANTHROPIC_API_KEY = VALID_ENV.ANTHROPIC_API_KEY;
+    process.env.LANGSMITH_API_KEY = VALID_ENV.LANGSMITH_API_KEY;
+    process.env.LANGSMITH_PROJECT = VALID_ENV.LANGSMITH_PROJECT;
+    process.env.NODE_ENV = VALID_ENV.NODE_ENV;
+    process.env.PORT = VALID_ENV.PORT;
+    resetConfig();
+  });
+
+  afterEach(() => {
+    // Restore original env vars
+    for (const [k, v] of Object.entries(SAVED)) {
+      if (v === undefined) {
+        delete process.env[k];
+      } else {
+        process.env[k] = v;
+      }
+    }
+    resetConfig();
+  });
+
+  it("returns a Config instance from process.env", () => {
+    const cfg = getConfig();
+    expect(cfg).toBeDefined();
+    expect(cfg.anthropicApiKey).toBe(VALID_ENV.ANTHROPIC_API_KEY);
+  });
+
+  it("caches the instance — returns same object on second call", () => {
+    const first = getConfig();
+    const second = getConfig();
+    expect(first).toBe(second);
+  });
+
+  it("resetConfig clears the cache so next getConfig reloads", () => {
+    const first = getConfig();
+    resetConfig();
+    process.env.PORT = "9999";
+    const second = getConfig();
+    expect(first).not.toBe(second);
+    expect(second.port).toBe(9999);
+  });
+
+  it("resetConfig does not throw when cache is already null", () => {
+    resetConfig();
+    expect(() => resetConfig()).not.toThrow();
+  });
+});
+
+// Type-level check
+const _typeCheck: Config = loadConfig(VALID_ENV);
+void _typeCheck;

@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+dist/
+
+# Environment
+.env
+
+# Coverage
+coverage/
+*.lcov
+
+# SQLite
+*.db
+*.db-shm
+*.db-wal
+
+# Agent sandbox (managed by the agent at runtime)
+workspace/agent_sandbox/*
+!workspace/agent_sandbox/.gitkeep
+
+# OS
+.DS_Store
+*.swp
+*.swo
+
+# IDE
+.idea/
+.vscode/settings.json
+
+# Logs
+*.log
+
+# Build artifacts
+*.tsbuildinfo
