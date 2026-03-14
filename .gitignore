@@ -32,3 +32,4 @@ workspace/agent_sandbox/*
 
 # Build artifacts
 *.tsbuildinfo
+.scannerwork/

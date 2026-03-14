@@ -5,6 +5,7 @@
  * TDD: these tests must fail before src/agents/editor.ts exists.
  */
 
+import { vi } from 'vitest';
 import { HumanMessage, AIMessage } from "@langchain/core/messages";
 import { makeEditorNode } from "../src/agents/editor";
 import type { AgentState } from "../src/core/state";
@@ -37,15 +38,15 @@ const BASE_STATE: AgentState = {
 };
 
 const mockLlm = {
-  invoke: jest.fn(),
-  bindTools: jest.fn().mockReturnThis(),
+  invoke: vi.fn(),
+  bindTools: vi.fn().mockReturnThis(),
 };
 
 const mockTools: Required<GraphTools> = {
-  write_file: jest.fn(),
-  read_file: jest.fn().mockReturnValue(""),
-  execute_shell: jest.fn().mockReturnValue({ stdout: "", stderr: "", exitCode: 0 }),
-  search_web: jest.fn().mockReturnValue(""),
+  write_file: vi.fn(),
+  read_file: vi.fn().mockReturnValue(""),
+  execute_shell: vi.fn().mockReturnValue({ stdout: "", stderr: "", exitCode: 0 }),
+  search_web: vi.fn().mockReturnValue(""),
 };
 
 // ---------------------------------------------------------------------------
@@ -54,9 +55,9 @@ const mockTools: Required<GraphTools> = {
 
 describe("makeEditorNode", () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-    mockTools.write_file = jest.fn();
-    mockTools.read_file = jest.fn().mockReturnValue("");
+    vi.clearAllMocks();
+    mockTools.write_file = vi.fn();
+    mockTools.read_file = vi.fn().mockReturnValue("");
   });
 
   it("returns a callable node function", () => {
@@ -77,7 +78,7 @@ describe("makeEditorNode", () => {
     const node = makeEditorNode(mockLlm as never, mockTools);
     await node(BASE_STATE);
     expect(mockTools.write_file).toHaveBeenCalledTimes(1);
-    const [args] = (mockTools.write_file as jest.Mock).mock.calls;
+    const [args] = (mockTools.write_file as ReturnType<typeof vi.fn>).mock.calls;
     expect(args[0]).toMatchObject({ content: code });
   });
 
@@ -87,7 +88,7 @@ describe("makeEditorNode", () => {
     mockLlm.invoke.mockResolvedValue(new AIMessage(codeOutput));
     const node = makeEditorNode(mockLlm as never, mockTools);
     await node(BASE_STATE);
-    const [args] = (mockTools.write_file as jest.Mock).mock.calls;
+    const [args] = (mockTools.write_file as ReturnType<typeof vi.fn>).mock.calls;
     expect(args[0]).toMatchObject({ path: "app.py", content: "from flask import Flask" });
   });
 
@@ -132,7 +133,7 @@ describe("makeEditorNode", () => {
     const node = makeEditorNode(mockLlm as never, mockTools);
     await node(BASE_STATE);
     expect(mockTools.write_file).toHaveBeenCalledTimes(1);
-    const [args] = (mockTools.write_file as jest.Mock).mock.calls;
+    const [args] = (mockTools.write_file as ReturnType<typeof vi.fn>).mock.calls;
     expect(args[0]).toMatchObject({ path: "output.py" });
   });
 
@@ -142,7 +143,7 @@ describe("makeEditorNode", () => {
     mockLlm.invoke.mockResolvedValue(new AIMessage(pathOnly));
     const node = makeEditorNode(mockLlm as never, mockTools);
     await node(BASE_STATE);
-    const [args] = (mockTools.write_file as jest.Mock).mock.calls;
+    const [args] = (mockTools.write_file as ReturnType<typeof vi.fn>).mock.calls;
     expect(args[0]).toMatchObject({ path: "output.py" });
   });
 });
