@@ -226,4 +226,165 @@ describe("InMemoryTaskService", () => {
     const taskId = res.body.data.taskId as string;
     expect(service.getTask(taskId)).not.toBeNull();
   });
+
+  // ── New tests: prompt persistence ────────────────────────────────────────
+
+  it("createTask persists the prompt on the task", () => {
+    const service = new InMemoryTaskService();
+    const task = service.createTask({ prompt: "my prompt" });
+    expect(task.prompt).toBe("my prompt");
+  });
+
+  it("getTask returns a task with the original prompt", () => {
+    const service = new InMemoryTaskService();
+    const created = service.createTask({ prompt: "stored prompt" });
+    const found = service.getTask(created.taskId);
+    expect(found!.prompt).toBe("stored prompt");
+  });
+
+  // ── New tests: updateTask ─────────────────────────────────────────────────
+
+  it("updateTask updates the status of a task", () => {
+    const service = new InMemoryTaskService();
+    const task = service.createTask({ prompt: "update me" });
+    service.updateTask(task.taskId, { status: "processing" });
+    expect(service.getTask(task.taskId)!.status).toBe("processing");
+  });
+
+  it("updateTask updates progress", () => {
+    const service = new InMemoryTaskService();
+    const task = service.createTask({ prompt: "progress" });
+    service.updateTask(task.taskId, { progress: 50 });
+    expect(service.getTask(task.taskId)!.progress).toBe(50);
+  });
+
+  it("updateTask updates artifacts", () => {
+    const service = new InMemoryTaskService();
+    const task = service.createTask({ prompt: "artifacts" });
+    service.updateTask(task.taskId, { artifacts: ["file1.ts", "file2.ts"] });
+    expect(service.getTask(task.taskId)!.artifacts).toEqual(["file1.ts", "file2.ts"]);
+  });
+
+  it("updateTask updates result", () => {
+    const service = new InMemoryTaskService();
+    const task = service.createTask({ prompt: "result" });
+    service.updateTask(task.taskId, { result: "done!" });
+    expect(service.getTask(task.taskId)!.result).toBe("done!");
+  });
+
+  it("updateTask with unknown taskId does not throw (no-op)", () => {
+    const service = new InMemoryTaskService();
+    expect(() => {
+      service.updateTask("nonexistent-id", { status: "completed" });
+    }).not.toThrow();
+  });
+
+  it("updateTask partial patch does not overwrite untouched fields", () => {
+    const service = new InMemoryTaskService();
+    const task = service.createTask({ prompt: "partial" });
+    service.updateTask(task.taskId, { status: "processing" });
+    const found = service.getTask(task.taskId)!;
+    expect(found.prompt).toBe("partial");
+    expect(found.progress).toBe(0);
+    expect(found.artifacts).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GraphRunner integration
+// ---------------------------------------------------------------------------
+
+import type { GraphRunner } from "../src/api/server";
+
+describe("createApp with GraphRunner", () => {
+  it("POST /api/agent/tasks with graph runner returns 201 immediately with status 'processing'", async () => {
+    const graphRunner: GraphRunner = (_prompt) =>
+      new Promise((resolve) => setTimeout(() => resolve({ artifacts: [] }), 5000));
+
+    const service = new InMemoryTaskService();
+    const app = createApp(service, graphRunner);
+
+    const res = await request(app)
+      .post("/api/agent/tasks")
+      .send({ prompt: "run the graph" });
+
+    expect(res.status).toBe(201);
+    expect(res.body.data.status).toBe("processing");
+  });
+
+  it("graph runner is called with the trimmed prompt", async () => {
+    const receivedPrompts: string[] = [];
+    const graphRunner: GraphRunner = (prompt) => {
+      receivedPrompts.push(prompt);
+      return Promise.resolve({ artifacts: [] });
+    };
+
+    const service = new InMemoryTaskService();
+    const app = createApp(service, graphRunner);
+
+    await request(app)
+      .post("/api/agent/tasks")
+      .send({ prompt: "  hello world  " });
+
+    // Give the background task time to run
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(receivedPrompts).toEqual(["hello world"]);
+  });
+
+  it("when graph runner resolves, task becomes 'completed' with artifacts", async () => {
+    let resolveRunner!: (val: { artifacts: string[] }) => void;
+    const graphRunner: GraphRunner = (_prompt) =>
+      new Promise((resolve) => { resolveRunner = resolve; });
+
+    const service = new InMemoryTaskService();
+    const app = createApp(service, graphRunner);
+
+    const res = await request(app)
+      .post("/api/agent/tasks")
+      .send({ prompt: "complete me" });
+    const taskId = res.body.data.taskId as string;
+
+    // Resolve the runner after the HTTP response
+    resolveRunner({ artifacts: ["output.py", "README.md"] });
+    await new Promise((r) => setTimeout(r, 20));
+
+    const task = service.getTask(taskId)!;
+    expect(task.status).toBe("completed");
+    expect(task.progress).toBe(100);
+    expect(task.artifacts).toEqual(["output.py", "README.md"]);
+  });
+
+  it("when graph runner rejects, task becomes 'failed' with error message in result", async () => {
+    let rejectRunner!: (err: Error) => void;
+    const graphRunner: GraphRunner = (_prompt) =>
+      new Promise<{ artifacts: string[] }>((_resolve, reject) => { rejectRunner = reject; });
+
+    const service = new InMemoryTaskService();
+    const app = createApp(service, graphRunner);
+
+    const res = await request(app)
+      .post("/api/agent/tasks")
+      .send({ prompt: "fail me" });
+    const taskId = res.body.data.taskId as string;
+
+    rejectRunner(new Error("graph exploded"));
+    await new Promise((r) => setTimeout(r, 20));
+
+    const task = service.getTask(taskId)!;
+    expect(task.status).toBe("failed");
+    expect(task.result).toBe("graph exploded");
+  });
+
+  it("POST without graph runner keeps status 'queued' (backward compat)", async () => {
+    const service = new InMemoryTaskService();
+    const app = createApp(service); // no graphRunner
+
+    const res = await request(app)
+      .post("/api/agent/tasks")
+      .send({ prompt: "old behaviour" });
+
+    expect(res.status).toBe(201);
+    expect(res.body.data.status).toBe("queued");
+  });
 });
