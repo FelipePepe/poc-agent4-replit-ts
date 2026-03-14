@@ -11,8 +11,8 @@
  *
  * Design:
  *  - Pure factory — no global state, fully injectable/testable.
- *  - Uses Ollama fallback as placeholder for local model (phi3-mini) until
- *    Ollama integration is fully wired (roadmap item #3).
+ *  - When OLLAMA_BASE_URL is set, uses phi3:mini as the trajectory classifier
+ *    (LLM-based). Falls back to rule-based classifier otherwise.
  *  - If ANTHROPIC_API_KEY is invalid the graph.invoke() will throw and the
  *    REST layer will transition the task to "failed" — no crash at startup.
  */
@@ -22,6 +22,7 @@ import { HumanMessage } from "@langchain/core/messages";
 import { buildGraph } from "../core/graph";
 import { makeTools } from "../core/tools";
 import { makeTrajectoryClassifier } from "../guidance/classifier";
+import { createLlmClassifier } from "../guidance/ollama_classifier";
 import { makeModelRouter } from "../core/models";
 import { setupLangSmith, wrapWithTrace } from "../core/tracing";
 import type { Config } from "../core/config";
@@ -49,8 +50,8 @@ export function createGraphRunner(config: Config): GraphRunner {
     apiKey: config.anthropicApiKey,
   });
 
-  // Local model (phi3-mini via Ollama) — placeholder until Ollama wiring is complete
-  const localLlm = fallbackLlm;
+  // Local model (phi3-mini via Ollama) — used when consecutive_errors >= localThreshold
+  const localLlm = fallbackLlm; // Ollama LLM TBD — using fallback as placeholder for model router
 
   const tools = makeTools({
     sandboxDir: config.sandbox.dir,
@@ -58,7 +59,11 @@ export function createGraphRunner(config: Config): GraphRunner {
     allowedCommands: [...config.sandbox.allowedCommands],
   });
 
-  const classifier = makeTrajectoryClassifier();
+  // Use LLM classifier if OLLAMA_BASE_URL is set, otherwise rule-based
+  const ollamaBaseUrl = process.env.OLLAMA_BASE_URL;
+  const classifier = ollamaBaseUrl
+    ? createLlmClassifier(ollamaBaseUrl, config.models.local)
+    : makeTrajectoryClassifier();
 
   const modelRouter = makeModelRouter(
     { fallback: config.models.fallbackThreshold, local: config.models.localThreshold },
