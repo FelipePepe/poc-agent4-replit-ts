@@ -10,7 +10,13 @@
  *                                → 404 { error: { code, message }, meta }
  *
  * Design:
- *  - createApp(service?) is a pure factory: no global state, fully injectable.
+ *  - createApp(service?, graphRunner?) is a pure factory: no global state,
+ *    fully injectable.
+ *  - When graphRunner is provided, POST creates the task in "processing" state
+ *    and launches the runner in the background (fire-and-forget). On success
+ *    the task transitions to "completed"; on failure to "failed".
+ *  - When graphRunner is omitted, POST creates the task in "queued" state
+ *    (backward-compatible behaviour).
  *  - All inputs are validated before reaching the service layer (OWASP A03).
  *  - Error responses follow a consistent envelope: { error, meta }.
  *  - No secrets or credentials handled here: principle of least privilege.
@@ -24,6 +30,19 @@
 import express, { type Request, type Response } from "express";
 import swaggerUi from "swagger-ui-express";
 import { InMemoryTaskService } from "./task_service";
+
+// ---------------------------------------------------------------------------
+// GraphRunner — injectable type; keeps server.ts decoupled from graph.ts
+// ---------------------------------------------------------------------------
+
+/**
+ * GraphRunner
+ *
+ * A function that receives a prompt string and returns a Promise resolving to
+ * the graph execution result.  Keeping this as a plain function type makes it
+ * trivially mockable in tests and avoids any coupling to LangGraph internals.
+ */
+export type GraphRunner = (prompt: string) => Promise<{ artifacts: string[] }>;
 
 // ---------------------------------------------------------------------------
 // OpenAPI spec
@@ -137,6 +156,8 @@ const openApiSpec = {
           status:    { type: "string", enum: ["queued", "processing", "completed", "failed"] },
           progress:  { type: "number", minimum: 0, maximum: 100 },
           artifacts: { type: "array", items: { type: "string" } },
+          prompt:    { type: "string" },
+          result:    { type: "string" },
         },
       },
       TaskEnvelope: {
@@ -185,12 +206,15 @@ function errorEnvelope(code: string, message: string) {
  * createApp
  *
  * Creates and configures the Express application.
- * An optional `service` can be injected for testing.
  *
- * @param service  Optional InMemoryTaskService instance (default: new instance).
+ * @param service      Optional InMemoryTaskService instance (default: new instance).
+ * @param graphRunner  Optional GraphRunner for background graph execution.
+ *                     When provided, POST creates the task in "processing" state
+ *                     and fires the runner asynchronously.
  */
 export function createApp(
-  service: InMemoryTaskService = new InMemoryTaskService()
+  service: InMemoryTaskService = new InMemoryTaskService(),
+  graphRunner?: GraphRunner
 ): express.Application {
   const app = express();
 
@@ -216,8 +240,37 @@ export function createApp(
       return;
     }
 
-    const task = service.createTask({ prompt: prompt.trim() });
-    res.status(201).json(successEnvelope(task));
+    const trimmedPrompt = prompt.trim();
+
+    if (graphRunner) {
+      // Create task in "processing" state and run the graph in the background.
+      const task = service.createTask({ prompt: trimmedPrompt });
+      service.updateTask(task.taskId, { status: "processing" });
+
+      // Fire-and-forget: do NOT await here so the HTTP response returns immediately.
+      graphRunner(trimmedPrompt).then(
+        (result) => {
+          service.updateTask(task.taskId, {
+            status: "completed",
+            progress: 100,
+            artifacts: result.artifacts,
+          });
+        },
+        (err: unknown) => {
+          service.updateTask(task.taskId, {
+            status: "failed",
+            result: err instanceof Error ? err.message : String(err),
+          });
+        }
+      );
+
+      // Return the snapshot taken right after updateTask("processing").
+      res.status(201).json(successEnvelope(service.getTask(task.taskId)));
+    } else {
+      // Legacy behaviour: task stays in "queued".
+      const task = service.createTask({ prompt: trimmedPrompt });
+      res.status(201).json(successEnvelope(task));
+    }
   });
 
   // ---- GET /api/agent/tasks/:taskId ---------------------------------------
