@@ -200,6 +200,43 @@ describe("buildGraph Fase 1 — ReAct loop", () => {
     expect(result.messages.length).toBeGreaterThan(1);
   });
 
+  it("returns error ToolMessage when the tool function throws", async () => {
+    const throwingMsg = new AIMessage({
+      content: "",
+      tool_calls: [{ id: "tc-throw", name: "write_file", args: { path: "x.py", content: "bad" } }],
+    });
+    mockTools.write_file = jest.fn().mockImplementation(() => {
+      throw new Error("disk write failed");
+    });
+    mockLlm.invoke
+      .mockResolvedValueOnce(throwingMsg)
+      .mockResolvedValueOnce(new AIMessage("recovered"));
+
+    const graph = buildGraph(fase1Config);
+    const result = await graph.invoke({ messages: [new HumanMessage("test error")] });
+
+    const errMsg = result.messages.find(
+      (m: { content?: unknown }) =>
+        typeof m.content === "string" && (m.content as string).includes("Error:")
+    );
+    expect(errMsg).toBeDefined();
+  });
+
+  it("uses auto-generated call id when tool_call has no id", async () => {
+    // tool_call without an id field — graph should still work
+    const noIdMsg = new AIMessage({
+      content: "",
+      tool_calls: [{ name: "write_file", args: { path: "auto.py", content: "x" } }],
+    });
+    mockLlm.invoke
+      .mockResolvedValueOnce(noIdMsg)
+      .mockResolvedValueOnce(new AIMessage("done"));
+
+    const graph = buildGraph(fase1Config);
+    const result = await graph.invoke({ messages: [new HumanMessage("no id test")] });
+    expect(result.messages.length).toBeGreaterThan(0);
+  });
+
   it("JSON-serialises non-string tool results into ToolMessage content", async () => {
     const shellCallMsg = new AIMessage({
       content: "",

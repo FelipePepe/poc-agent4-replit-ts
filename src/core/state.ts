@@ -120,6 +120,8 @@ export interface ToolCall {
 export interface Subtask {
   id: string;
   description: string;
+  /** Type of subtask — used by supervisor to route to the right agent. */
+  type?: "code" | "search" | "verify";
   status: "pending" | "in_progress" | "done" | "failed";
   assigned_agent?: string;
   result?: string;
