@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.6.0] — 2026-03-15
+
+### Added
+- Branch coverage raised from 92.48% → 100%: 17 new tests across 8 files
+- Final stats: 323 tests | 100% branch | 100% functions | 99.74% lines
+
 ## [1.5.0] — 2026-03-15
 
 ### Added
