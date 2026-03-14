@@ -1,0 +1,17 @@
+# Changelog
+
+## [1.0.0] — 2026-03-14
+
+### Added
+- **Fase 0** — AgentState, Config, SQLite WAL, minimal LangGraph graph
+- **Fase 1** — Sandboxed tools (read_file, write_file, execute_shell, search_web) + ReAct loop
+- **Fase 2** — PlannerAgent, EditorAgent, VerifierAgent, SearcherAgent
+- **Fase 3** — ParallelExecutorNode + ConflictResolver (Promise.all fan-out)
+- **Fase 4** — TrajectoryClassifier with ephemeral micro-instruction injection
+- **Fase 5** — ModelRouter: automatic doom-loop prevention (Sonnet → Haiku → Ollama/phi3-mini)
+- **Fase 6** — SnapshotEngine: git commit + SQLite metadata roundtrip
+- **Fase 7** — MCP server + loadMcpTools() dynamic tool discovery
+- **Fase 8** — REST API (Express) + Swagger UI at `/api-docs/`
+- GitFlow documentation (`docs/git-workflow.md`)
+- 273 tests, 100% line coverage, ~93% branch coverage
+- Husky hooks: Conventional Commits, Gitleaks, protected-branch policy, lint-staged
