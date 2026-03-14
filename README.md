@@ -87,7 +87,7 @@ Fase 0 → Fase 1 → Fase 2 → Fase 6 → Fase 3 → Fase 4 → Fase 5 → Fas
 
 ```bash
 node --version   # must be >= 20.x (tested on 25.7.0)
-npm install
+npm install      # also installs git hooks via husky (pre-commit, commit-msg, pre-merge-commit)
 
 # Optional: local classifier model
 ollama pull phi3-mini
@@ -95,6 +95,9 @@ ollama pull phi3-mini
 # Environment
 cp .env.example .env        # set ANTHROPIC_API_KEY, LANGSMITH_API_KEY
 ```
+
+> **Git hooks installed automatically** by `npm install` via husky `prepare` script.
+> Hooks enforce: Conventional Commits, Gitleaks secret scanning, protected-branch policy, lint-staged.
 
 ---
 
@@ -104,16 +107,19 @@ cp .env.example .env        # set ANTHROPIC_API_KEY, LANGSMITH_API_KEY
 # Run tests (strict TDD: 273 tests, 100% line coverage)
 npm test
 
-# Type-check only
+# Run tests in watch mode
+npm run test:watch
+
+# Type-check only (no emit)
 npm run typecheck
 
 # Lint
 npm run lint
 
-# Start the REST API in dev mode (tsx, hot-reload)
+# Start the REST API in dev mode (tsx, live reload)
 npm run dev
 
-# Build and start compiled output
+# Build to dist/ and start compiled output
 npm run build
 npm start
 ```
