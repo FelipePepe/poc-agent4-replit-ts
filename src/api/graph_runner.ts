@@ -23,6 +23,7 @@ import { buildGraph } from "../core/graph";
 import { makeTools } from "../core/tools";
 import { makeTrajectoryClassifier } from "../guidance/classifier";
 import { makeModelRouter } from "../core/models";
+import { setupLangSmith, wrapWithTrace } from "../core/tracing";
 import type { Config } from "../core/config";
 import type { GraphRunner } from "./server";
 
@@ -36,6 +37,8 @@ import type { GraphRunner } from "./server";
  * artifacts produced by the agent (file paths written during execution).
  */
 export function createGraphRunner(config: Config): GraphRunner {
+  setupLangSmith(config);
+
   const mainLlm = new ChatAnthropic({
     model: config.models.primary,
     apiKey: config.anthropicApiKey,
@@ -65,10 +68,12 @@ export function createGraphRunner(config: Config): GraphRunner {
 
   const graph = buildGraph({ config, llm: mainLlm, tools, classifier, modelRouter });
 
-  return async (prompt: string): Promise<{ artifacts: string[] }> => {
+  const runner = async (prompt: string): Promise<{ artifacts: string[] }> => {
     const result = await graph.invoke({
       messages: [new HumanMessage(prompt)],
     });
     return { artifacts: result.artifacts ?? [] };
   };
+
+  return wrapWithTrace(runner, "agent-task");
 }
