@@ -1,0 +1,4 @@
+npx tsx scripts/git_hooks/check_protected_branch.ts
+npx tsx scripts/git_hooks/check_branch_naming.ts
+npx tsx scripts/git_hooks/run_gitleaks.ts
+npx lint-staged
