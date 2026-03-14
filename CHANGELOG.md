@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.1.1] — 2026-03-14
+
+### Added
+- Pre-push hook: SonarQube analysis launched in background on every push (non-blocking)
+- Skips gracefully if `SONAR_TOKEN_POC_AGENT4_TS` is not set
+
 ## [1.1.0] — 2026-03-14
 
 ### Added
