@@ -22,7 +22,146 @@
  */
 
 import express, { type Request, type Response } from "express";
+import swaggerUi from "swagger-ui-express";
 import { InMemoryTaskService } from "./task_service";
+
+// ---------------------------------------------------------------------------
+// OpenAPI spec
+// ---------------------------------------------------------------------------
+
+const openApiSpec = {
+  openapi: "3.0.3",
+  info: {
+    title: "PoC Agent4 Replit — REST API",
+    version: "v1",
+    description:
+      "REST API for the multi-agent LangGraph system. Submit prompts as tasks and poll for results.",
+  },
+  paths: {
+    "/health": {
+      get: {
+        summary: "Health check",
+        operationId: "health",
+        tags: ["System"],
+        responses: {
+          "200": {
+            description: "Service is up",
+            content: {
+              "application/json": {
+                schema: { type: "object", properties: { status: { type: "string", example: "ok" } } },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/agent/tasks": {
+      post: {
+        summary: "Create a new agent task",
+        operationId: "createTask",
+        tags: ["Tasks"],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["prompt"],
+                properties: {
+                  prompt: { type: "string", example: "Write a Python hello-world script" },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "201": {
+            description: "Task created",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/TaskEnvelope" },
+              },
+            },
+          },
+          "400": {
+            description: "Invalid prompt",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorEnvelope" },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/agent/tasks/{taskId}": {
+      get: {
+        summary: "Get task status",
+        operationId: "getTask",
+        tags: ["Tasks"],
+        parameters: [
+          {
+            name: "taskId",
+            in: "path",
+            required: true,
+            schema: { type: "string", format: "uuid" },
+          },
+        ],
+        responses: {
+          "200": {
+            description: "Task found",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/TaskEnvelope" },
+              },
+            },
+          },
+          "404": {
+            description: "Task not found",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorEnvelope" },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+  components: {
+    schemas: {
+      TaskDetail: {
+        type: "object",
+        properties: {
+          taskId:    { type: "string", format: "uuid" },
+          status:    { type: "string", enum: ["queued", "processing", "completed", "failed"] },
+          progress:  { type: "number", minimum: 0, maximum: 100 },
+          artifacts: { type: "array", items: { type: "string" } },
+        },
+      },
+      TaskEnvelope: {
+        type: "object",
+        properties: {
+          data: { $ref: "#/components/schemas/TaskDetail" },
+          meta: { type: "object", properties: { apiVersion: { type: "string", example: "v1" } } },
+        },
+      },
+      ErrorEnvelope: {
+        type: "object",
+        properties: {
+          error: {
+            type: "object",
+            properties: {
+              code:    { type: "string" },
+              message: { type: "string" },
+            },
+          },
+          meta: { type: "object", properties: { apiVersion: { type: "string", example: "v1" } } },
+        },
+      },
+    },
+  },
+};
 
 // ---------------------------------------------------------------------------
 // Response helpers
@@ -57,6 +196,9 @@ export function createApp(
 
   // Parse JSON bodies; no need for larger body-parser config in this PoC.
   app.use(express.json());
+
+  // ---- GET /api-docs (Swagger UI) -----------------------------------------
+  app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(openApiSpec));
 
   // ---- GET /health --------------------------------------------------------
   app.get("/health", (_req: Request, res: Response) => {
