@@ -44,7 +44,7 @@ export const AgentStateAnnotation = Annotation.Root({
   /** Currently active model identifier. */
   current_model: Annotation<string>({
     reducer: (_prev, next) => next,
-    default: () => "claude-sonnet",
+    default: () => "gpt-4o",
   }),
 
   // --- Phase 2 ---

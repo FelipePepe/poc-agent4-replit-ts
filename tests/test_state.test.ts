@@ -40,10 +40,10 @@ describe("AgentStateAnnotation", () => {
       expect(val).toBe(0);
     });
 
-    it("current_model defaults to claude-sonnet", () => {
-       
+    it("current_model defaults to gpt-4o", () => {
+
       const val = (AgentStateAnnotation.spec.current_model as any).initialValueFactory() as string;
-      expect(val).toBe("claude-sonnet");
+      expect(val).toBe("gpt-4o");
     });
 
     it("task_id defaults to empty string", () => {
@@ -175,7 +175,7 @@ const _typeCheck: AgentState = {
   messages: [],
   tool_calls: [],
   error_count: 0,
-  current_model: "claude-sonnet",
+  current_model: "gpt-4o",
   task_id: "",
   subtasks: [],
   active_agent: "supervisor",

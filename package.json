@@ -1,7 +1,7 @@
 {
   "name": "poc-agent4-replit-ts",
   "version": "1.6.0",
-  "description": "PoC Replit Agent 4 clone \u2014 TypeScript / LangGraph.js / Express",
+  "description": "PoC Replit Agent 4 clone — TypeScript / LangGraph.js / Express",
   "main": "dist/api/index.js",
   "scripts": {
     "build": "tsc",
@@ -15,9 +15,9 @@
     "sonar": "bash scripts/run_sonar.sh"
   },
   "dependencies": {
-    "@langchain/anthropic": "^0.3.0",
-    "@langchain/core": "^0.3.0",
-    "@langchain/langgraph": "^0.2.0",
+    "@langchain/core": "^1.1.32",
+    "@langchain/langgraph": "^1.2.2",
+    "@langchain/openai": "^1.2.13",
     "@modelcontextprotocol/sdk": "^1.27.1",
     "better-sqlite3": "^12.8.0",
     "dotenv": "^16.4.5",
