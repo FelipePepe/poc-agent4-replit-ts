@@ -13,11 +13,11 @@
  *  - Pure factory — no global state, fully injectable/testable.
  *  - When OLLAMA_BASE_URL is set, uses phi3:mini as the trajectory classifier
  *    (LLM-based). Falls back to rule-based classifier otherwise.
- *  - If ANTHROPIC_API_KEY is invalid the graph.invoke() will throw and the
+ *  - If GITHUB_TOKEN is invalid the graph.invoke() will throw and the
  *    REST layer will transition the task to "failed" — no crash at startup.
  */
 
-import { ChatAnthropic } from "@langchain/anthropic";
+import { ChatOpenAI } from "@langchain/openai";
 import { HumanMessage } from "@langchain/core/messages";
 import { buildGraph } from "../core/graph";
 import { makeTools } from "../core/tools";
@@ -40,14 +40,19 @@ import type { GraphRunner } from "./server";
 export function createGraphRunner(config: Config): GraphRunner {
   setupLangSmith(config);
 
-  const mainLlm = new ChatAnthropic({
+  const copilotConfig = {
+    apiKey: config.githubToken,
+    configuration: { baseURL: "https://api.githubcopilot.com" },
+  };
+
+  const mainLlm = new ChatOpenAI({
     model: config.models.primary,
-    apiKey: config.anthropicApiKey,
+    ...copilotConfig,
   });
 
-  const fallbackLlm = new ChatAnthropic({
+  const fallbackLlm = new ChatOpenAI({
     model: config.models.fallback,
-    apiKey: config.anthropicApiKey,
+    ...copilotConfig,
   });
 
   // Local model (phi3-mini via Ollama) — used when consecutive_errors >= localThreshold
@@ -71,12 +76,19 @@ export function createGraphRunner(config: Config): GraphRunner {
     { main: config.models.primary, fallback: config.models.fallback, local: config.models.local }
   );
 
-  const graph = buildGraph({ config, llm: mainLlm, tools, classifier, modelRouter });
+  const graph = buildGraph({
+    config,
+    llm: mainLlm,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    tools: tools as any,
+    classifier,
+    modelRouter,
+  });
 
   const runner = async (prompt: string): Promise<{ artifacts: string[] }> => {
     const result = await graph.invoke({
       messages: [new HumanMessage(prompt)],
-    });
+    }) as { artifacts?: string[] };
     return { artifacts: result.artifacts ?? [] };
   };
 

@@ -2,7 +2,7 @@
  * src/api/index.ts — Entry point for the REST API server.
  *
  * Reads PORT from environment (default 3000) and starts the Express app.
- * Wires the real LangGraph graph runner if ANTHROPIC_API_KEY is available.
+ * Wires the real LangGraph graph runner if GITHUB_TOKEN is available.
  * If env vars are missing, the server starts without a graph runner and
  * tasks will remain in "queued" state (safe degraded mode).
  */

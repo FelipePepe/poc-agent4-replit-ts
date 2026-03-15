@@ -32,8 +32,9 @@ import {
   type WorkerMap,
 } from "../agents/parallel_executor";
 import {
-  makeTrajectoryClassifier,
   ACTIVATION_THRESHOLD,
+  type ClassifierInput,
+  type ClassificationResult,
 } from "../guidance/classifier";
 import { makeModelRouter } from "./models";
 import type { BaseMessage } from "@langchain/core/messages";
@@ -68,7 +69,7 @@ export interface GraphConfig {
    * When provided, the supervisor calls it on every step where
    * consecutiveErrors >= ACTIVATION_THRESHOLD to get micro-instructions.
    */
-  classifier?: ReturnType<typeof makeTrajectoryClassifier>;
+  classifier?: { classify: (input: ClassifierInput) => ClassificationResult | Promise<ClassificationResult> };
   /**
    * Optional model router for Fase 5 anti-doom-loop switching.
    * When provided, the supervisor selects the appropriate LLM based on
@@ -98,7 +99,7 @@ function estimateTokens(messages: BaseMessage[]): number {
 
 function makeSupervisorNode(
   llm: BaseChatModel,
-  classifier?: ReturnType<typeof makeTrajectoryClassifier>,
+  classifier?: { classify: (input: ClassifierInput) => ClassificationResult | Promise<ClassificationResult> },
   modelRouter?: ReturnType<typeof makeModelRouter>
 ) {
   return async function supervisorNode(
@@ -127,10 +128,10 @@ function makeSupervisorNode(
     const contextMessages: BaseMessage[] = [...state.messages];
 
     if (classifier && state.consecutive_errors >= ACTIVATION_THRESHOLD) {
-      const classResult = classifier.classify({
+      const classResult = await Promise.resolve(classifier.classify({
         consecutiveErrors: state.consecutive_errors,
         tokenCount: estimateTokens(state.messages),
-      });
+      }));
       if (classResult.shouldActivate && classResult.microInstructions.length > 0) {
         // Inject at END — NOT stored in state.messages
         contextMessages.push(

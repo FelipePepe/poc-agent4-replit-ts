@@ -8,7 +8,7 @@
 import { loadConfig, getConfig, resetConfig, type Config } from "../src/core/config";
 
 const VALID_ENV = {
-  ANTHROPIC_API_KEY: "sk-ant-test-key",
+  GITHUB_TOKEN: "ghp_test-key",
   LANGSMITH_API_KEY: "ls-test-key",
   LANGSMITH_PROJECT: "test-project",
   NODE_ENV: "test",
@@ -17,9 +17,9 @@ const VALID_ENV = {
 
 describe("loadConfig", () => {
   describe("required variables", () => {
-    it("throws if ANTHROPIC_API_KEY is missing", () => {
-      const env = { ...VALID_ENV, ANTHROPIC_API_KEY: "" };
-      expect(() => loadConfig(env)).toThrow(/ANTHROPIC_API_KEY/);
+    it("throws if GITHUB_TOKEN is missing", () => {
+      const env = { ...VALID_ENV, GITHUB_TOKEN: "" };
+      expect(() => loadConfig(env)).toThrow(/GITHUB_TOKEN/);
     });
 
     it("throws if LANGSMITH_API_KEY is missing", () => {
@@ -27,11 +27,11 @@ describe("loadConfig", () => {
       expect(() => loadConfig(env)).toThrow(/LANGSMITH_API_KEY/);
     });
 
-    it("throws if ANTHROPIC_API_KEY is undefined", () => {
+    it("throws if GITHUB_TOKEN is undefined", () => {
       const env = { ...VALID_ENV };
-      delete (env as Record<string, string>)["ANTHROPIC_API_KEY"];
+      delete (env as Record<string, string>)["GITHUB_TOKEN"];
       expect(() => loadConfig(env as NodeJS.ProcessEnv)).toThrow(
-        /ANTHROPIC_API_KEY/
+        /GITHUB_TOKEN/
       );
     });
   });
@@ -78,9 +78,9 @@ describe("loadConfig", () => {
       expect(cfg.models.localThreshold).toBe(6);
     });
 
-    it("has primary model claude-sonnet", () => {
+    it("has primary model gpt-4o", () => {
       const cfg = loadConfig(VALID_ENV);
-      expect(cfg.models.primary).toContain("claude-sonnet");
+      expect(cfg.models.primary).toContain("gpt-4o");
     });
   });
 
@@ -104,8 +104,8 @@ describe("loadConfig", () => {
   describe("secrets are not exposed", () => {
     it("does not expose apiKey directly on the Config shape", () => {
       const cfg = loadConfig(VALID_ENV) as unknown as Record<string, unknown>;
-      // anthropicApiKey should exist but we verify the shape is typed
-      expect(typeof cfg["anthropicApiKey"]).toBe("string");
+      // githubToken should exist but we verify the shape is typed
+      expect(typeof cfg["githubToken"]).toBe("string");
     });
   });
 });
@@ -119,12 +119,12 @@ describe("getConfig singleton", () => {
 
   beforeEach(() => {
     // Save and inject test keys into process.env
-    SAVED.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+    SAVED.GITHUB_TOKEN = process.env.GITHUB_TOKEN;
     SAVED.LANGSMITH_API_KEY = process.env.LANGSMITH_API_KEY;
     SAVED.LANGSMITH_PROJECT = process.env.LANGSMITH_PROJECT;
     SAVED.NODE_ENV = process.env.NODE_ENV;
     SAVED.PORT = process.env.PORT;
-    process.env.ANTHROPIC_API_KEY = VALID_ENV.ANTHROPIC_API_KEY;
+    process.env.GITHUB_TOKEN = VALID_ENV.GITHUB_TOKEN;
     process.env.LANGSMITH_API_KEY = VALID_ENV.LANGSMITH_API_KEY;
     process.env.LANGSMITH_PROJECT = VALID_ENV.LANGSMITH_PROJECT;
     process.env.NODE_ENV = VALID_ENV.NODE_ENV;
@@ -147,7 +147,7 @@ describe("getConfig singleton", () => {
   it("returns a Config instance from process.env", () => {
     const cfg = getConfig();
     expect(cfg).toBeDefined();
-    expect(cfg.anthropicApiKey).toBe(VALID_ENV.ANTHROPIC_API_KEY);
+    expect(cfg.githubToken).toBe(VALID_ENV.GITHUB_TOKEN);
   });
 
   it("caches the instance — returns same object on second call", () => {

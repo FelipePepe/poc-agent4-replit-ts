@@ -19,7 +19,7 @@ import path from "path";
 // ---------------------------------------------------------------------------
 
 export interface Config {
-  readonly anthropicApiKey: string;
+  readonly githubToken: string;
   readonly langsmithApiKey: string;
   readonly langsmithProject: string;
   readonly nodeEnv: string;
@@ -45,11 +45,11 @@ export interface Config {
 // ---------------------------------------------------------------------------
 
 export function loadConfig(env: NodeJS.ProcessEnv): Config {
-  const anthropicApiKey = requireVar(env, "ANTHROPIC_API_KEY");
+  const githubToken = requireVar(env, "GITHUB_TOKEN");
   const langsmithApiKey = requireVar(env, "LANGSMITH_API_KEY");
 
   return {
-    anthropicApiKey,
+    githubToken,
     langsmithApiKey,
     langsmithProject: optionalVar(env, "LANGSMITH_PROJECT", "poc-agent4-ts"),
     nodeEnv: optionalVar(env, "NODE_ENV", "development"),
@@ -60,8 +60,8 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
       path.resolve(process.cwd(), "workspace", "agent4.db")
     ),
     models: {
-      primary: "claude-sonnet-4-5",
-      fallback: "claude-haiku-4-5",
+      primary: "gpt-4o",
+      fallback: "gpt-4o-mini",
       fallbackThreshold: 3,
       localThreshold: 6,
       local: "phi3-mini",

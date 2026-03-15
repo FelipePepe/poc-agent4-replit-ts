@@ -18,7 +18,7 @@ import { makeTrajectoryClassifier } from "../src/guidance/classifier";
 import { makeModelRouter, FALLBACK_THRESHOLD, LOCAL_THRESHOLD } from "../src/core/models";
 
 const TEST_ENV = {
-  ANTHROPIC_API_KEY: "sk-ant-test-key",
+  GITHUB_TOKEN: "ghp_test-key",
   LANGSMITH_API_KEY: "ls-test-key",
 };
 

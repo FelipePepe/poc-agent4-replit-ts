@@ -27,15 +27,15 @@ vi.mock("langsmith/traceable", () => ({
 
 function makeConfig(overrides: Partial<Config> = {}): Config {
   return {
-    anthropicApiKey: "test-key",
+    githubToken: "test-key",
     langsmithApiKey: "ls-test-key",
     langsmithProject: "test-project",
     nodeEnv: "test",
     port: 3000,
     dbPath: ":memory:",
     models: {
-      primary: "claude-sonnet-4-5",
-      fallback: "claude-haiku-4-5",
+      primary: "gpt-4o",
+      fallback: "gpt-4o-mini",
       fallbackThreshold: 3,
       localThreshold: 6,
       local: "phi3-mini",

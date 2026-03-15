@@ -42,8 +42,8 @@ vi.mock("../src/core/models", () => ({
   LOCAL_THRESHOLD: 6,
 }));
 
-vi.mock("@langchain/anthropic", () => ({
-  ChatAnthropic: class {
+vi.mock("@langchain/openai", () => ({
+  ChatOpenAI: class {
     invoke = vi.fn();
   },
 }));
@@ -54,15 +54,15 @@ vi.mock("@langchain/anthropic", () => ({
 
 function makeConfig(overrides: Partial<Config> = {}): Config {
   return {
-    anthropicApiKey: "test-key",
+    githubToken: "test-key",
     langsmithApiKey: "ls-key",
     langsmithProject: "test-proj",
     nodeEnv: "test",
     port: 3000,
     dbPath: ":memory:",
     models: {
-      primary: "claude-sonnet-4-5",
-      fallback: "claude-haiku-4-5",
+      primary: "gpt-4o",
+      fallback: "gpt-4o-mini",
       fallbackThreshold: 3,
       localThreshold: 6,
       local: "phi3-mini",
