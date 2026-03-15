@@ -169,10 +169,10 @@ describe("getDb singleton", () => {
   const SAVED: Record<string, string | undefined> = {};
 
   beforeEach(() => {
-    SAVED.GITHUB_TOKEN = process.env.GITHUB_TOKEN;
+    SAVED.GITHUB_OAUTH_TOKEN = process.env.GITHUB_OAUTH_TOKEN;
     SAVED.LANGSMITH_API_KEY = process.env.LANGSMITH_API_KEY;
     SAVED.DB_PATH = process.env.DB_PATH;
-    process.env.GITHUB_TOKEN = "ghp_test";
+    process.env.GITHUB_OAUTH_TOKEN = "ghp_test-oauth";
     process.env.LANGSMITH_API_KEY = "ls-test";
     process.env.DB_PATH = ":memory:";
     resetConfig();

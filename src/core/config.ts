@@ -10,9 +10,15 @@
  * - loadConfig() is a pure function — injectable in tests.
  * - The exported `config` singleton lazy-loads from process.env on
  *   first access so tests can set env vars before importing.
+ *
+ * GitHub OAuth token resolution order:
+ *   1. GITHUB_OAUTH_TOKEN env var (set by OAuth callback in multi-user mode)
+ *   2. `gh auth token` CLI (local dev — requires `gh auth login`)
+ *   3. Throws with a helpful message if neither is available.
  */
 
 import path from "path";
+import { execSync } from "child_process";
 
 // ---------------------------------------------------------------------------
 // Config shape
@@ -45,7 +51,7 @@ export interface Config {
 // ---------------------------------------------------------------------------
 
 export function loadConfig(env: NodeJS.ProcessEnv): Config {
-  const githubToken = requireVar(env, "GITHUB_TOKEN");
+  const githubToken = resolveGithubToken(env);
   const langsmithApiKey = requireVar(env, "LANGSMITH_API_KEY");
 
   return {
@@ -110,6 +116,33 @@ export function resetConfig(): void {
 // ---------------------------------------------------------------------------
 // Private helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * resolveGithubToken
+ *
+ * Resolution order:
+ *  1. GITHUB_OAUTH_TOKEN env var — used in multi-user / CI / OAuth callback flows.
+ *  2. `gh auth token` — used in local dev after `gh auth login`.
+ *
+ * Throws a descriptive error if neither source provides a token.
+ */
+function resolveGithubToken(env: NodeJS.ProcessEnv): string {
+  const fromEnv = env["GITHUB_OAUTH_TOKEN"];
+  if (fromEnv) return fromEnv;
+
+  try {
+    const token = execSync("gh auth token", { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }).trim();
+    if (token) return token;
+  } catch {
+    // gh not installed or not logged in — fall through to error
+  }
+
+  throw new Error(
+    "GitHub OAuth token not found.\n" +
+    "  Local dev:  run `gh auth login` then retry.\n" +
+    "  Production: set the GITHUB_OAUTH_TOKEN environment variable."
+  );
+}
 
 function requireVar(env: NodeJS.ProcessEnv, key: string): string {
   const value = env[key];
